@@ -1,0 +1,10 @@
+{
+  "name": "Electronic Music Studio",
+  "slug": "electronic-music-studio",
+  "kind": "web",
+  "runtime": "browser",
+  "run_cmd": "open prototype/index.html",
+  "entry": "prototype/index.html",
+  "description": "Browser DAW: step-sequencer drum machine, synths, live MIDI input, and natural-language beat generation. Slice 1.",
+  "stack": ["Web Audio API", "Tone.js", "Web MIDI API"]
+}
