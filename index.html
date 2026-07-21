@@ -120,7 +120,6 @@
   }
   .panel h2::after{content:"";flex:1;height:1px;min-width:20px;
     background:linear-gradient(90deg,var(--line),transparent)}
-  .panel h2 .idx{color:var(--acc-hi);font-weight:700;opacity:.9}
   .panel h2 .sub{font-size:9.5px;letter-spacing:.14em;color:var(--faint)}
   .panel h2 #editBankLbl{color:var(--acc2);font-weight:700}
 
@@ -129,6 +128,27 @@
     background:linear-gradient(180deg,rgba(24,28,41,.88),rgba(16,19,28,.86));
     -webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);
   }
+
+  /* ---------------- views (tab chrome — CSS show/hide only) ---------------- */
+  .viewbar{
+    display:flex;gap:4px;padding:4px;margin:0 0 13px;border-radius:var(--r-m);
+    background:var(--surface-0);border:1px solid var(--line-soft);box-shadow:var(--inset-ctl);
+  }
+  .vtab{
+    flex:1;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;gap:7px;
+    background:transparent;border:none;box-shadow:none;border-radius:9px;padding:8px 6px;
+    color:var(--dim);font:600 11.5px var(--font-ui);letter-spacing:.09em;text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .vtab:hover{transform:none;color:var(--txt)}
+  .vtab.on{
+    background:linear-gradient(180deg,var(--acc-hi),var(--acc-deep));color:#fff;
+    box-shadow:0 2px 12px -2px rgba(123,104,255,.6), inset 0 1px 0 rgba(255,255,255,.3);
+    text-shadow:0 1px 2px rgba(20,10,80,.4);
+  }
+  .view{display:none}
+  .view.on{display:block;animation:viewin .18s var(--ease)}
+  @keyframes viewin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
   /* ---------------- buttons ---------------- */
   button{
@@ -201,6 +221,9 @@
     background-repeat:no-repeat;background-position:right 9px center;
   }
   .ctl-master input[type=range]{width:140px}
+  /* transport: primary row + quieter settings row (collapsible on phones) */
+  .t-more{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-soft)}
+  .t-toggle{display:none}
 
   /* pills + LEDs */
   .pill{
@@ -377,7 +400,8 @@
   }
 
   /* ---------------- piano keys ---------------- */
-  .keys{position:relative;height:138px;user-select:none;margin-top:4px}
+  .keys-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .keys{position:relative;height:138px;width:356px;min-width:356px;user-select:none;margin-top:4px}
   .keys::before{ /* rail above the keybed */
     content:"";position:absolute;top:0;left:0;width:353px;height:6px;border-radius:3px 3px 0 0;
     background:linear-gradient(180deg,var(--acc-deep),#38288f);
@@ -507,7 +531,6 @@
       linear-gradient(180deg,var(--surface-2) 0%,var(--surface-1) 100%);
     box-shadow:var(--shadow-panel), 0 0 38px -14px rgba(255,77,109,.35);
   }
-  .panel.vocal h2 .idx{color:var(--hot-hi)}
   .fxrack{
     display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
     gap:11px;margin-top:16px;
@@ -590,13 +613,35 @@
   /* ---------------- misc ---------------- */
   .hint{font:400 11.5px/1.6 var(--font-ui);color:var(--dim);margin-top:10px}
   .hint b{color:var(--txt-2)}
+  /* unified empty states */
+  .song > .sub,.tracks > .sub,.sessions > .sub{
+    display:block;width:100%;text-align:center;padding:10px 8px;color:var(--faint)}
   .foot{margin:28px 0 8px;text-align:center;
     font:500 10px var(--font-mono);letter-spacing:.1em;color:var(--faint)}
 
   @media (max-width:760px){
-    :root{--lane-w:96px}
-    .app{padding:14px 12px 26px}
-    .panel{padding:15px;border-radius:var(--r-m)}
+    :root{--cell-gap:4px}
+    .app{padding:12px 10px 26px}
+    .panel{padding:14px;border-radius:var(--r-m)}
+    .toolbar{top:8px}
+    .col,.wide,.exp{min-width:100%}
+    /* transport: primaries always visible, extras collapse behind ⚙ more */
+    .t-toggle{display:inline-flex;margin-left:auto}
+    .t-more{display:none}
+    .toolbar.more-open .t-more{display:flex}
+    .t-main .primary{padding:12px 18px}
+    .vtab{font-size:10px;letter-spacing:.03em;gap:4px;padding:8px 2px}
+    /* step grid: lane name sits above its row, taller touch cells */
+    .stepnums{margin-left:0}
+    .seq{grid-template-columns:1fr;gap:4px}
+    .lane-head{justify-content:flex-start;padding:7px 0 0}
+    .cell{aspect-ratio:auto;height:32px}
+    .fxrack{grid-template-columns:repeat(2,1fr);gap:9px}
+    .genwrap textarea{min-width:0;width:100%}
+    .genwrap button.gen{width:100%;min-width:0}
+    .pill{white-space:normal}
+    .tmini input[type=range]{width:72px}
+    .tmini input[type=range].tpan{width:56px}
   }
 </style>
 </head>
@@ -616,16 +661,25 @@
     <span class="badge" data-ref="slice-badge">beat → voice → fx → record</span>
   </header>
 
-  <!-- TRANSPORT -->
+  <!-- STICKY CHROME: view tabs + transport (persistent across views) -->
   <div class="panel toolbar" data-ref="transport-panel">
-    <div class="transport">
+    <nav class="viewbar" id="viewBar" data-ref="view-tabs" aria-label="Views">
+      <button class="vtab on" data-view="make" data-ref="tab-make">✨ Make</button>
+      <button class="vtab" data-view="perform" data-ref="tab-perform">🎤 Perform</button>
+      <button class="vtab" data-view="mix" data-ref="tab-mix">🎚 Mix</button>
+      <button class="vtab" data-view="sessions" data-ref="tab-sessions">💾 Sessions</button>
+    </nav>
+    <div class="transport t-main">
       <button class="primary" id="playBtn" data-ref="play-btn">▶ Play</button>
       <button id="stopBtn" data-ref="stop-btn">■ Stop</button>
       <div class="seg" data-ref="mode-toggle" title="Loop the selected bank, or play the whole song arrangement">
         <button id="modeLoop" class="on">Loop</button><button id="modeSong">Song</button>
       </div>
-      <span class="vdiv"></span>
       <div class="ctl"><label>BPM</label><input type="number" id="bpm" value="120" min="40" max="220" data-ref="bpm-input"/></div>
+      <span class="pill" data-ref="pos-readout" id="posReadout">— · loop</span>
+      <button class="small ghost t-toggle" id="tMore" data-ref="transport-more" aria-expanded="false">⚙ more</button>
+    </div>
+    <div class="transport t-more" id="tExtras" data-ref="transport-extras">
       <div class="ctl"><label>Swing %</label><input type="number" id="swing" value="0" min="0" max="70" data-ref="swing-input"/></div>
       <div class="ctl"><label>Key</label>
         <select id="key" data-ref="key-select">
@@ -638,33 +692,18 @@
       <span class="vdiv"></span>
       <div class="ctl ctl-master"><label>Master</label><input type="range" id="master" min="-40" max="0" value="-5" data-ref="master-vol"/></div>
       <span class="vdiv"></span>
-      <span class="pill" data-ref="pos-readout" id="posReadout">— · loop</span>
       <span class="pill" data-ref="midi-status"><span class="led" id="midiLed"></span> MIDI: scanning…</span>
-      <span class="vdiv"></span>
       <button class="small ghost" id="resetProject" data-ref="reset-project" title="Clear the saved project (beat, settings & audio tracks) and start fresh">↺ Reset project</button>
       <span class="pill" id="saveStatus" data-ref="save-status" style="display:none">saved ✓</span>
     </div>
   </div>
 
-  <!-- VOCAL BOOTH — the star of the show -->
-  <div class="panel vocal" data-ref="mic-panel">
-    <h2><span class="idx">01</span> Vocal booth <span class="sub">arm the mic · perform over the beat · throw fx</span></h2>
-    <div class="transport" data-ref="mic-controls">
-      <button id="armMic" class="primary" data-ref="arm-mic">🎤 Arm mic</button>
-      <button id="recMic" data-ref="rec-mic" disabled>● Record take</button>
-      <label class="pill" title="Hear your voice (with FX) in the mix. Wear headphones."><input type="checkbox" id="monMic" checked/> monitor voice</label>
-      <span class="pill"><span class="led" id="micLed"></span> <span id="micStat">not armed</span></span>
-      <span class="vdiv"></span>
-      <span class="pill">🎧 <b>use headphones</b> — your voice is live in the mix &amp; in the WAV export</span>
-    </div>
-    <div class="fxrack" id="fxRack" data-ref="vocal-rack"></div>
-    <div class="hint"><b>Tap</b> a pad to latch an effect on/off · <b>press &amp; hold</b> to throw it only while held (release = clean voice).
-      “● Record take” captures your voice <b>with FX</b> as a looping lane, synced to the beat. Voice level lives on the <b>VOICE</b> fader in the mixer.</div>
-  </div>
+  <!-- ============ MAKE — build the beat ============ -->
+  <section class="view on" id="view-make" data-ref="view-make">
 
   <!-- GENERATOR -->
   <div class="panel" data-ref="generator-panel">
-    <h2><span class="idx">02</span> Beat generator <span class="sub">natural language → selected bank</span></h2>
+    <h2>Beat generator <span class="sub">describe it → it plays</span></h2>
     <div class="genwrap">
       <textarea id="prompt" data-ref="nl-prompt" placeholder="Describe a beat…">128 bpm driving techno, four-on-the-floor, off-beat open hats, dark rolling bassline</textarea>
       <button class="primary gen" id="genBtn" data-ref="generate-btn">✨ Generate</button>
@@ -690,12 +729,12 @@
         <input type="checkbox" id="keyLock" checked data-ref="key-lock"/> 🔒 key lock</label>
     </div>
     <div class="sub readout" id="genReadout" data-ref="gen-readout"></div>
-    <div class="hint" data-ref="tempo-hint">One project tempo: in <b>Loop</b> mode a preset sets its suggested BPM · in <b>Song</b> mode generating keeps the transport BPM so mid-song genre switches stay coherent. <b>🔒 Key lock</b> keeps every bank in the same key so the beat can change completely and stay in tune.</div>
+    <div class="hint" data-ref="tempo-hint"><b>Loop</b> mode: a preset sets its own BPM · <b>Song</b> mode keeps yours. <b>🔒 Key lock</b> keeps every bank in the project key.</div>
   </div>
 
   <!-- ARRANGEMENT -->
   <div class="panel" data-ref="arrangement-panel">
-    <h2><span class="idx">03</span> Arrangement <span class="sub">banks &amp; song timeline</span></h2>
+    <h2>Arrangement <span class="sub">banks · song timeline</span></h2>
     <div class="banks">
       <span class="banks-lbl">Bank</span>
       <span id="bankBtns" data-ref="bank-buttons" style="display:contents"></span>
@@ -710,20 +749,39 @@
     <div class="banks" style="margin-top:11px" id="bankGenres" data-ref="bank-genres">
       <span class="banks-lbl" title="Set a genre per bank — with Key Lock on they all share the project key, so chaining them in Song mode changes the beat completely but stays in tune.">Bank genre</span>
     </div>
-    <div class="song" id="songLane" data-ref="song-lane"><span class="sub" id="songEmpty">Song is empty — set a bank, then “+A / +B…” to chain sections. Switch to <b>Song</b> mode to play it.</span></div>
+    <div class="song" id="songLane" data-ref="song-lane"><span class="sub" id="songEmpty">Song is empty — tap <b>+A / +B…</b> to chain sections, then switch to <b>Song</b> mode.</span></div>
     <div class="hint" id="songLen"></div>
   </div>
 
   <!-- SEQUENCER -->
   <div class="panel" data-ref="sequencer-panel">
-    <h2><span class="idx">04</span> Step sequencer <span class="sub">editing bank <b id="editBankLbl">A</b></span></h2>
+    <h2>Step sequencer <span class="sub">editing bank <b id="editBankLbl">A</b></span></h2>
     <div class="stepnums" id="stepnums"></div>
     <div class="seq" id="grid" data-ref="step-grid"></div>
   </div>
 
+  </section>
+
+  <!-- ============ PERFORM — voice, synth & layers ============ -->
+  <section class="view" id="view-perform" data-ref="view-perform">
+
+  <!-- VOCAL BOOTH — the star of the show -->
+  <div class="panel vocal" data-ref="mic-panel">
+    <h2>Vocal booth <span class="sub">arm · perform · throw fx</span></h2>
+    <div class="transport" data-ref="mic-controls">
+      <button id="armMic" class="primary" data-ref="arm-mic">🎤 Arm mic</button>
+      <button id="recMic" data-ref="rec-mic" disabled>● Record take</button>
+      <label class="pill" title="Hear your voice (with FX) in the mix. Wear headphones."><input type="checkbox" id="monMic" checked/> monitor voice</label>
+      <span class="pill"><span class="led" id="micLed"></span> <span id="micStat">not armed</span></span>
+      <span class="pill">🎧 <b>headphones</b> — your voice is live in the mix</span>
+    </div>
+    <div class="fxrack" id="fxRack" data-ref="vocal-rack"></div>
+    <div class="hint"><b>Tap</b> a pad = latch on/off · <b>hold</b> = throw while held. <b>● Record take</b> loops your voice (with FX) into Tracks — level on the <b>VOICE</b> fader in Mix.</div>
+  </div>
+
   <!-- TRACKS / LOOP OVERDUB -->
   <div class="panel" data-ref="tracks-panel">
-    <h2><span class="idx">05</span> Tracks · loop overdub <span class="sub">stack voice &amp; synth layers over the beat</span></h2>
+    <h2>Tracks · loop overdub <span class="sub">stack layers over the beat</span></h2>
     <div class="transport" data-ref="overdub-controls">
       <button id="odubBtn" data-ref="overdub-rec">● Overdub</button>
       <div class="ctl"><label>Source</label>
@@ -739,45 +797,54 @@
       <span class="pill"><span class="led" id="odubLed"></span> <span id="odubStat" data-ref="overdub-status">idle</span></span>
     </div>
     <div class="tracks" id="trackList" data-ref="track-list">
-      <span class="sub" id="trackEmpty">No layers yet — hit <b>● Overdub</b> to record your mic (with FX) or the synth as a synced loop: sing a hook, then stack a harmony, a spoken verse, a synth line. Imported files &amp; mic takes land here too.</span>
+      <span class="sub" id="trackEmpty">No layers yet — <b>● Overdub</b> records your mic (with FX) or the synth as a synced loop.</span>
     </div>
-    <div class="hint">Recording waits for the next bar (plus optional count-in), captures exactly the set bars in sync, then the layer <b>joins the mix on the next bar</b> and loops forever. <b>M</b> mutes · <b>S</b> solos (soloing any track mutes the rest). Every layer routes to the master bus, so <b>Export</b> captures the whole stack.</div>
+    <div class="hint">Waits for the next bar, records exact bars in sync, then <b>joins the mix on the next bar</b>. <b>M</b> mute · <b>S</b> solo. Every layer lands in the export.</div>
   </div>
 
   <div class="row">
-    <!-- SAMPLING / IMPORT -->
-    <div class="panel col" data-ref="sampler-panel">
-      <h2><span class="idx">06</span> Import audio <span class="sub">file → track</span></h2>
-      <div class="drop" id="drop" data-ref="import-drop">⬇ Drop an audio file here, or click to choose<br><span class="sub">wav · mp3 · m4a · ogg — becomes a new sequencer lane (loop-toggle for a full track)</span></div>
-      <input type="file" id="fileInput" accept="audio/*" style="display:none"/>
-    </div>
     <!-- SYNTH -->
     <div class="panel wide" data-ref="keyboard-panel">
-      <h2><span class="idx">07</span> Synth <span class="sub">mouse · qwerty (A–K) · midi</span></h2>
-      <div class="keys" id="keys" data-ref="piano-keys"></div>
+      <h2>Synth <span class="sub">touch · qwerty A–K · midi</span></h2>
+      <div class="keys-scroll"><div class="keys" id="keys" data-ref="piano-keys"></div></div>
+    </div>
+    <!-- SAMPLING / IMPORT -->
+    <div class="panel col" data-ref="sampler-panel">
+      <h2>Import audio <span class="sub">file → track</span></h2>
+      <div class="drop" id="drop" data-ref="import-drop">⬇ Drop audio here, or tap to choose<br><span class="sub">wav · mp3 · m4a · ogg → new track lane</span></div>
+      <input type="file" id="fileInput" accept="audio/*" style="display:none"/>
     </div>
   </div>
 
+  </section>
+
+  <!-- ============ MIX — balance & bounce ============ -->
+  <section class="view" id="view-mix" data-ref="view-mix">
+
   <div class="row">
+    <!-- MIXER -->
+    <div class="panel col" data-ref="mixer-panel">
+      <h2>Mixer <span class="sub">levels · VOICE = your mic</span></h2>
+      <div class="mixrow" id="mixer"></div>
+    </div>
     <!-- EXPORT -->
     <div class="panel exp" data-ref="export-panel">
-      <h2><span class="idx">08</span> Export <span class="sub">bounce to wav</span></h2>
+      <h2>Export <span class="sub">bounce to wav</span></h2>
       <div class="transport">
         <button id="exportBtn" class="rec" data-ref="export-btn">● Record output</button>
         <span class="pill"><span class="led" id="expLed"></span> <span id="expStat">idle</span></span>
       </div>
-      <div class="hint">Captures everything you hear — beat, samples, synth, and your <b>voice with FX</b> — live → downloads a <b>.wav</b>. Hit Play, perform a pass, stop to save.</div>
-    </div>
-    <!-- MIXER -->
-    <div class="panel col" data-ref="mixer-panel">
-      <h2><span class="idx">09</span> Mixer <span class="sub">channel levels · VOICE = your mic</span></h2>
-      <div class="mixrow" id="mixer"></div>
+      <div class="hint">Records everything you hear — beat, synth, <b>voice with FX</b> — to a <b>.wav</b>. Play, perform a pass, stop to save.</div>
     </div>
   </div>
 
-  <!-- SESSIONS -->
+  </section>
+
+  <!-- ============ SESSIONS — save · load · share ============ -->
+  <section class="view" id="view-sessions" data-ref="view-sessions">
+
   <div class="panel" data-ref="sessions-panel">
-    <h2><span class="idx">10</span> Sessions <span class="sub">save · restore · move between devices</span></h2>
+    <h2>Sessions <span class="sub">save · load · move between devices</span></h2>
     <div class="transport" data-ref="session-controls">
       <button class="primary" id="saveSession" data-ref="save-session" title="Snapshot the whole project — beat, settings, banks & audio tracks — as a named session">💾 Save session</button>
       <button id="newSession" data-ref="new-session" title="Start a fresh blank working project (your saved sessions are kept)">✚ New blank</button>
@@ -786,8 +853,10 @@
       <span class="pill" id="sessStatus" data-ref="session-status" style="display:none"></span>
     </div>
     <div class="sessions" id="sessionList" data-ref="session-list"></div>
-    <div class="hint"><b>Save session</b> snapshots everything — composition, banks, mixer/FX and audio tracks — under a name. <b>Load</b> restores it as the working project · <b>Export</b> downloads a self-contained <b>.pulse.json</b> (audio included) you can <b>Import</b> on another device. Saving with an existing name updates that session.</div>
+    <div class="hint"><b>Save</b> snapshots everything under a name (same name = update) · <b>Export</b> downloads a portable <b>.pulse.json</b> (audio included) for <b>Import</b> on another device.</div>
   </div>
+
+  </section>
 
   <div class="foot" data-ref="footer">
     PULSE · beat &amp; voice performance studio · vocal fx rack · arrangement · import · export · engine live ·
@@ -1129,7 +1198,7 @@ document.getElementById("copyBank").onclick=()=>{ const from=banks[state.editBan
 document.getElementById("clearSong").onclick=()=>{ song.length=0; renderSong(); };
 function renderSong(){
   const lane=document.getElementById("songLane"); lane.innerHTML="";
-  if(!song.length){ lane.innerHTML='<span class="sub" id="songEmpty">Song is empty — set a bank, then “+A / +B…” to chain sections. Switch to <b>Song</b> mode to play it.</span>'; }
+  if(!song.length){ lane.innerHTML='<span class="sub" id="songEmpty">Song is empty — tap <b>+A / +B…</b> to chain sections, then switch to <b>Song</b> mode.</span>'; }
   song.forEach((blk,idx)=>{ const el=document.createElement("div");el.className="block";el.dataset.idx=idx;el.style.background=bankColor(blk.bank);
     el.style.width=(40+blk.bars*4)+"px";el.innerHTML=blk.bank+'<span class="bars">'+blk.bars+' bars</span><span class="del">✕</span>';
     el.querySelector(".del").onclick=ev=>{ev.stopPropagation();song.splice(idx,1);renderSong();};
@@ -2194,7 +2263,7 @@ function renderSessions(){
   wrap.innerHTML="";
   const idx=sessIndex();
   if(!idx.length){
-    wrap.innerHTML='<span class="sub">No saved sessions yet — <b>💾 Save session</b> snapshots the whole project (beat, banks, mixer/FX &amp; audio tracks) under a name you can come back to, or export to another device.</span>';
+    wrap.innerHTML='<span class="sub">No saved sessions yet — <b>💾 Save session</b> keeps a named snapshot of everything (beat, banks, mixer/FX &amp; audio).</span>';
     return;
   }
   idx.slice().sort((a,b)=>(+b.updated||0)-(+a.updated||0)).forEach(e=>{
@@ -2238,6 +2307,32 @@ if(!bootRestored){
 renderSong();
 try{ renderSessions(); }catch(e){ console.warn("PULSE: sessions list failed to render",e); }
 updatePos(0);
+
+/* ============================ VIEW CHROME ============================ */
+/* UI-only tabs: views are shown/hidden with a CSS class — every panel and
+   render target stays in the DOM, playback and state are untouched. The
+   last view is remembered; MAKE is the default (and the markup fallback). */
+(function(){
+  const VIEWS=["make","perform","mix","sessions"], VIEW_KEY="pulse.ui.view";
+  const bar=document.getElementById("viewBar"); if(!bar)return;
+  const tabs=[...bar.querySelectorAll(".vtab")];
+  function setView(v){
+    if(VIEWS.indexOf(v)<0)v="make";
+    VIEWS.forEach(k=>{ const s=document.getElementById("view-"+k); if(s)s.classList.toggle("on",k===v); });
+    tabs.forEach(b=>b.classList.toggle("on",b.dataset.view===v));
+    try{ localStorage.setItem(VIEW_KEY,v); }catch(e){}
+  }
+  tabs.forEach(b=>b.onclick=()=>setView(b.dataset.view));
+  let v="make"; try{ v=localStorage.getItem(VIEW_KEY)||"make"; }catch(e){}
+  setView(v);
+  /* mobile: collapse the secondary transport row behind ⚙ more */
+  const more=document.getElementById("tMore"), bar2=document.querySelector(".toolbar");
+  if(more&&bar2)more.onclick=()=>{
+    const open=bar2.classList.toggle("more-open");
+    more.textContent=open?"✕ close":"⚙ more";
+    more.setAttribute("aria-expanded",open?"true":"false");
+  };
+})();
 </script>
 </body>
 </html>
