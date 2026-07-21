@@ -250,10 +250,9 @@
   .banks{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
   .banks-lbl{font:600 9px var(--font-mono);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
   .gap{width:8px}
-  .bankbtn{width:44px;height:44px;font:700 15px var(--font-ui);border-radius:var(--r-s);
+  .bankbtn{--bkc:var(--acc);width:44px;height:44px;font:700 15px var(--font-ui);border-radius:var(--r-s);
     color:var(--dim);position:relative}
-  .bankbtn[data-bank="A"]{--bkc:var(--bank-a)} .bankbtn[data-bank="B"]{--bkc:var(--bank-b)}
-  .bankbtn[data-bank="C"]{--bkc:var(--bank-c)} .bankbtn[data-bank="D"]{--bkc:var(--bank-d)}
+  /* --bkc is set inline per button by renderBanks() — colors are programmatic (A–D brand + HSL beyond) */
   .bankbtn::after{content:"";position:absolute;left:10px;right:10px;bottom:5px;height:2px;
     border-radius:2px;background:var(--bkc);opacity:.4;transition:opacity .15s, box-shadow .15s}
   .bankbtn:hover::after{opacity:.8}
@@ -263,11 +262,24 @@
     box-shadow:0 4px 18px -4px color-mix(in srgb,var(--bkc) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.45);
   }
   .bankbtn.active::after{opacity:0}
-  button[data-add]{font-family:var(--font-mono);font-weight:700}
-  button[data-add="A"]{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--bank-a) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.06)}
-  button[data-add="B"]{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--bank-b) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.06)}
-  button[data-add="C"]{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--bank-c) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.06)}
-  button[data-add="D"]{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--bank-d) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.06)}
+  button[data-add]{--bkc:var(--acc);font-family:var(--font-mono);font-weight:700;
+    box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--bkc) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.06)}
+  /* per-bank delete affordance (hidden until hover, like song-block ✕) */
+  .bankbtn .bdel{
+    position:absolute;top:-7px;right:-7px;width:17px;height:17px;display:none;
+    background:linear-gradient(180deg,var(--hot-hi),var(--hot-deep));color:#fff;border-radius:50%;
+    font:400 10px/17px var(--font-ui);text-align:center;
+    box-shadow:0 2px 5px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .bankbtn:hover .bdel{display:block}
+  /* + add bank */
+  #addBank{
+    width:44px;height:44px;padding:0;border-radius:var(--r-s);
+    font:700 18px/1 var(--font-ui);color:var(--dim);
+    background:transparent;border:1.5px dashed var(--line-strong);box-shadow:none;
+  }
+  #addBank:hover{color:var(--acc-hi);border-color:var(--acc);
+    box-shadow:0 0 14px -4px rgba(123,104,255,.5)}
 
   .song{
     display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:60px;
@@ -662,18 +674,13 @@
     <h2><span class="idx">03</span> Arrangement <span class="sub">banks &amp; song timeline</span></h2>
     <div class="banks">
       <span class="banks-lbl">Bank</span>
-      <button class="bankbtn active" data-bank="A">A</button>
-      <button class="bankbtn" data-bank="B">B</button>
-      <button class="bankbtn" data-bank="C">C</button>
-      <button class="bankbtn" data-bank="D">D</button>
+      <span id="bankBtns" data-ref="bank-buttons" style="display:contents"></span>
+      <button id="addBank" data-ref="add-bank" title="Add a new empty pattern bank (up to Z)">＋</button>
       <span class="gap"></span>
-      <button class="small ghost" id="copyBank" title="Copy current bank into the next empty bank">⧉ Duplicate → next</button>
+      <button class="small ghost" id="copyBank" title="Copy current bank into the next empty bank (grows a new one if all are full)">⧉ Duplicate → next</button>
       <div class="ctl"><label>Block bars</label><input type="number" id="blockBars" value="4" min="1" max="16"/></div>
       <span class="banks-lbl">Add to song →</span>
-      <button class="small" data-add="A">+A</button>
-      <button class="small" data-add="B">+B</button>
-      <button class="small" data-add="C">+C</button>
-      <button class="small" data-add="D">+D</button>
+      <span id="songAdds" data-ref="song-adds" style="display:contents"></span>
       <button class="small ghost" id="clearSong">clear</button>
     </div>
     <div class="banks" style="margin-top:11px" id="bankGenres" data-ref="bank-genres">
@@ -754,9 +761,11 @@
 /* ============================ ENGINE ============================ */
 const STEPS=16;
 const INSTS=["kick","snare","hat","clap","bass"];
-const BANKS=["A","B","C","D"];
+let BANKS=["A","B","C","D"];           // mutable — banks can be added (E, F, … Z) and removed (min 1)
+const MAX_BANKS=26;                    // one bank per letter, A–Z
 function emptyPatt(){ return {kick:Array(STEPS).fill(0),snare:Array(STEPS).fill(0),hat:Array(STEPS).fill(0),clap:Array(STEPS).fill(0),bass:Array(STEPS).fill(0)}; }
-const banks={}; BANKS.forEach(b=> banks[b]={patt:emptyPatt(),bassNotes:Array(STEPS).fill(null),perc:Array(STEPS).fill(0),pluckNotes:Array(STEPS).fill(null),genre:null,filled:false});
+function emptyBank(){ return {patt:emptyPatt(),bassNotes:Array(STEPS).fill(null),perc:Array(STEPS).fill(0),pluckNotes:Array(STEPS).fill(null),genre:null,filled:false}; }
+const banks={}; BANKS.forEach(b=> banks[b]=emptyBank());
 const state={ editBank:"A", songMode:false, key:"A", scale:"minor", playing:false, songBar:0 };
 const song=[]; // [{bank,bars}]
 
@@ -985,20 +994,105 @@ function updatePos(i){ const r=document.getElementById("posReadout");
   else r.textContent="bank "+state.editBank+" · loop"; }
 
 /* ============================ BANKS + SONG UI ============================ */
-document.querySelectorAll("[data-bank]").forEach(b=>b.onclick=()=>selectBank(b.dataset.bank));
-function selectBank(name){ state.editBank=name; document.querySelectorAll("[data-bank]").forEach(b=>b.classList.toggle("active",b.dataset.bank===name));
+/* Bank colors are programmatic: A–D keep the fixed brand palette; every bank
+   beyond gets a golden-angle-spaced HSL hue keyed to its letter, so colors are
+   distinct, on-brand and deterministic (same bank id → same color, always). */
+const BANK_BASE_COLORS={A:"#6c5cff",B:"#00e0b8",C:"#ffd166",D:"#ff5c7a"};
+function bankColor(id){
+  if(BANK_BASE_COLORS[id])return BANK_BASE_COLORS[id];
+  const idx=id.charCodeAt(0)-65;                       // E=4, F=5, … Z=25
+  return "hsl("+Math.round((260+idx*137.508)%360)+", 78%, 64%)";
+}
+function nextBankId(){ for(let i=0;i<MAX_BANKS;i++){ const id=String.fromCharCode(65+i);
+  if(BANKS.indexOf(id)<0)return id; } return null; }
+
+function selectBank(name){ if(BANKS.indexOf(name)<0)name=BANKS[0];
+  state.editBank=name; document.querySelectorAll("[data-bank]").forEach(b=>b.classList.toggle("active",b.dataset.bank===name));
   document.getElementById("editBankLbl").textContent=name; syncCells(); updatePos(0); }
-document.getElementById("copyBank").onclick=()=>{ const from=banks[state.editBank]; const empty=BANKS.find(b=>!banks[b].filled&&b!==state.editBank)||BANKS[(BANKS.indexOf(state.editBank)+1)%4];
-  banks[empty]={patt:JSON.parse(JSON.stringify(from.patt)),bassNotes:[...from.bassNotes],perc:[...(from.perc||Array(STEPS).fill(0))],pluckNotes:[...(from.pluckNotes||Array(STEPS).fill(null))],genre:from.genre||null,filled:true};
-  selectBank(empty); updateBankGenreSel(empty); };
-document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ const bars=Math.max(1,+document.getElementById("blockBars").value||4);
-  song.push({bank:b.dataset.add,bars}); renderSong(); });
+
+function addBank(){
+  const id=nextBankId(); if(!id)return null;           // cap reached: 26 banks (A–Z)
+  BANKS.push(id); banks[id]=emptyBank();
+  renderBanks(); selectBank(id); scheduleSave();
+  return id;
+}
+function removeBank(id){
+  if(BANKS.length<=1)return;                           // always keep at least one bank
+  if(BANKS.indexOf(id)<0)return;
+  const used=song.filter(b=>b.bank===id).length;
+  if((banks[id]&&banks[id].filled)||used){
+    if(!confirm("Remove bank "+id+(used?" and its "+used+" song block"+(used>1?"s":""):"")+"?"))return;
+  }
+  for(let i=song.length-1;i>=0;i--)if(song[i].bank===id)song.splice(i,1);  // no dead references in the song
+  BANKS.splice(BANKS.indexOf(id),1); delete banks[id]; delete bankGenreSel[id];
+  if(state.songMode_curBank===id)state.songMode_curBank=null;
+  if(state.editBank===id)state.editBank=BANKS[0];
+  renderBanks(); renderSong(); selectBank(state.editBank); scheduleSave();
+}
+document.getElementById("addBank").onclick=()=>addBank();
+
+/* renderBanks(): rebuilds the bank buttons, the song "+X" add buttons and the
+   per-bank genre pickers from the live BANKS list. Called on boot, add/remove
+   and restore — the DOM always mirrors the current bank set. */
+const bankGenreSel={};
+function renderBanks(){
+  const btnWrap=document.getElementById("bankBtns"); btnWrap.innerHTML="";
+  BANKS.forEach(id=>{
+    const b=document.createElement("button");
+    b.className="bankbtn"+(id===state.editBank?" active":"");
+    b.dataset.bank=id; b.textContent=id;
+    b.style.setProperty("--bkc",bankColor(id));
+    b.onclick=()=>selectBank(id);
+    if(BANKS.length>1){
+      const d=document.createElement("span"); d.className="bdel"; d.textContent="✕";
+      d.title="remove bank "+id; d.dataset.ref="remove-bank-"+id;
+      d.onclick=ev=>{ ev.stopPropagation(); removeBank(id); };
+      b.appendChild(d);
+    }
+    btnWrap.appendChild(b);
+  });
+  const addBtn=document.getElementById("addBank");
+  addBtn.disabled=BANKS.length>=MAX_BANKS;
+  addBtn.title=addBtn.disabled?"Bank limit reached (A–Z)":"Add a new empty pattern bank (up to Z)";
+  const addWrap=document.getElementById("songAdds"); addWrap.innerHTML="";
+  BANKS.forEach(id=>{
+    const a=document.createElement("button"); a.className="small";
+    a.dataset.add=id; a.textContent="+"+id;
+    a.style.setProperty("--bkc",bankColor(id));
+    a.title="append bank "+id+" to the song";
+    a.onclick=()=>{ const bars=Math.max(1,+document.getElementById("blockBars").value||4);
+      song.push({bank:id,bars}); renderSong(); };
+    addWrap.appendChild(a);
+  });
+  renderBankGenres();
+}
+function renderBankGenres(){
+  const wrap=document.getElementById("bankGenres");
+  const prev={}; Object.keys(bankGenreSel).forEach(b=>{ prev[b]=bankGenreSel[b].value; delete bankGenreSel[b]; });
+  wrap.querySelectorAll(".ctl").forEach(el=>el.remove());
+  BANKS.forEach(b=>{
+    const c=document.createElement("div"); c.className="ctl";
+    const l=document.createElement("label"); l.textContent="Bank "+b; l.style.color=bankColor(b); c.appendChild(l);
+    const s=document.createElement("select"); s.dataset.ref="bank-genre-"+b; s.style.width="122px";
+    s.appendChild(new Option("—",""));
+    Object.keys(GENRES).forEach(g=>s.appendChild(new Option(GENRE_LABEL[g],g)));
+    s.value=prev[b]!==undefined?prev[b]:(banks[b]&&GENRES[banks[b].genre]?banks[b].genre:"");
+    s.onchange=async()=>{ if(!s.value)return; await ensureAudio(); applyGen(genFromText(GENRE_PROMPT[s.value]),b); };
+    c.appendChild(s); wrap.appendChild(c); bankGenreSel[b]=s;
+  });
+}
+
+document.getElementById("copyBank").onclick=()=>{ const from=banks[state.editBank];
+  let dest=BANKS.find(b=>!banks[b].filled&&b!==state.editBank);
+  if(!dest)dest=addBank();                                             // all full → grow a fresh bank
+  if(!dest)dest=BANKS[(BANKS.indexOf(state.editBank)+1)%BANKS.length]; // at the A–Z cap → wrap to next
+  banks[dest]={patt:JSON.parse(JSON.stringify(from.patt)),bassNotes:[...from.bassNotes],perc:[...(from.perc||Array(STEPS).fill(0))],pluckNotes:[...(from.pluckNotes||Array(STEPS).fill(null))],genre:from.genre||null,filled:true};
+  selectBank(dest); updateBankGenreSel(dest); };
 document.getElementById("clearSong").onclick=()=>{ song.length=0; renderSong(); };
-const bankColor={A:"#6c5cff",B:"#00e0b8",C:"#ffd166",D:"#ff5c7a"};
 function renderSong(){
   const lane=document.getElementById("songLane"); lane.innerHTML="";
   if(!song.length){ lane.innerHTML='<span class="sub" id="songEmpty">Song is empty — set a bank, then “+A / +B…” to chain sections. Switch to <b>Song</b> mode to play it.</span>'; }
-  song.forEach((blk,idx)=>{ const el=document.createElement("div");el.className="block";el.dataset.idx=idx;el.style.background=bankColor[blk.bank];
+  song.forEach((blk,idx)=>{ const el=document.createElement("div");el.className="block";el.dataset.idx=idx;el.style.background=bankColor(blk.bank);
     el.style.width=(40+blk.bars*4)+"px";el.innerHTML=blk.bank+'<span class="bars">'+blk.bars+' bars</span><span class="del">✕</span>';
     el.querySelector(".del").onclick=ev=>{ev.stopPropagation();song.splice(idx,1);renderSong();};
     el.onclick=()=>selectBank(blk.bank); lane.appendChild(el); });
@@ -1199,20 +1293,9 @@ genreSelect.onchange=async()=>{ if(!genreSelect.value)return;
   document.getElementById("prompt").value=GENRE_PROMPT[genreSelect.value];
   await ensureAudio(); applyGen(genFromText(document.getElementById("prompt").value)); };
 
-/* --- per-bank genre pickers: A=jersey, B=dakiti, C=drill… for song-mode switching --- */
-const bankGenreSel={};
-{ const wrap=document.getElementById("bankGenres");
-  BANKS.forEach(b=>{
-    const c=document.createElement("div"); c.className="ctl";
-    const l=document.createElement("label"); l.textContent="Bank "+b; c.appendChild(l);
-    const s=document.createElement("select"); s.dataset.ref="bank-genre-"+b; s.style.width="122px";
-    s.appendChild(new Option("—",""));
-    Object.keys(GENRES).forEach(g=>s.appendChild(new Option(GENRE_LABEL[g],g)));
-    s.onchange=async()=>{ if(!s.value)return; await ensureAudio(); applyGen(genFromText(GENRE_PROMPT[s.value]),b); };
-    c.appendChild(s); wrap.appendChild(c); bankGenreSel[b]=s;
-  });
-}
-function updateBankGenreSel(b){ if(bankGenreSel[b]) bankGenreSel[b].value=GENRES[banks[b].genre]?banks[b].genre:""; }
+/* --- per-bank genre pickers are rendered by renderBanks() (dynamic bank set) --- */
+function updateBankGenreSel(b){ if(bankGenreSel[b]) bankGenreSel[b].value=(banks[b]&&GENRES[banks[b].genre])?banks[b].genre:""; }
+renderBanks();   // initial render: bank buttons, "+X" song-add buttons, per-bank genre pickers
 
 /* ============================ IMPORT AUDIO ============================ */
 const drop=document.getElementById("drop"),fileInput=document.getElementById("fileInput");
@@ -1607,6 +1690,7 @@ function fxAmounts(){ const o={};
 function serializeProject(){
   const $=id=>document.getElementById(id);
   return { v:1, t:Date.now(),
+    bankList:[...BANKS],               // dynamic bank set (absent in older saves → fixed A–D)
     banks:BANKS.reduce((o,b)=>{ const B=banks[b];
       o[b]={patt:INSTS.reduce((p,i)=>{p[i]=[...B.patt[i]];return p;},{}),
             bassNotes:[...B.bassNotes],perc:[...(B.perc||Array(STEPS).fill(0))],
@@ -1679,11 +1763,19 @@ function noteArr16(a){ const out=Array(STEPS).fill(null);
   if(Array.isArray(a))for(let i=0;i<STEPS;i++){ if(typeof a[i]==="string"&&/^[A-G]#?\d$/.test(a[i]))out[i]=a[i]; }
   return out; }
 function applyProject(d){
-  BANKS.forEach(b=>{ const s=d.banks&&d.banks[b]; if(!s)return;
+  /* dynamic bank set — v1 saves without bankList are legacy fixed A–D projects */
+  let list=Array.isArray(d.bankList)?d.bankList.filter(b=>typeof b==="string"&&/^[A-Z]$/.test(b)):["A","B","C","D"];
+  list=[...new Set(list)].slice(0,MAX_BANKS);
+  if(!list.length)list=["A","B","C","D"];
+  BANKS=list;
+  Object.keys(banks).forEach(k=>delete banks[k]);
+  BANKS.forEach(b=>{ banks[b]=emptyBank(); const s=d.banks&&d.banks[b]; if(!s)return;
     const B={patt:emptyPatt(),bassNotes:noteArr16(s.bassNotes),perc:numArr16(s.perc),
              pluckNotes:noteArr16(s.pluckNotes),genre:typeof s.genre==="string"?s.genre:null,filled:!!s.filled};
     INSTS.forEach(i=>B.patt[i]=numArr16(s.patt&&s.patt[i]));
     banks[b]=B; });
+  if(BANKS.indexOf(state.editBank)<0)state.editBank=BANKS[0];
+  renderBanks();                       // bank buttons, +X song buttons & genre pickers mirror the restored set
   song.length=0;
   if(Array.isArray(d.song))d.song.forEach(x=>{ if(x&&BANKS.indexOf(x.bank)>=0)
     song.push({bank:x.bank,bars:Math.min(16,Math.max(1,Math.round(+x.bars)||4))}); });
@@ -1714,7 +1806,7 @@ function applyProject(d){
       const v=Math.min(f.amt.max,Math.max(f.amt.min,n)); el.value=v; f.amt.set(v,f); }
     else if(f.sel){ const v=String(d.fx[f.id]);
       if(f.sel.options.some(o=>o[0]===v)){ el.value=v; f.sel.set(v,f); } } });
-  selectBank(BANKS.indexOf(d.editBank)>=0?d.editBank:"A");
+  selectBank(BANKS.indexOf(d.editBank)>=0?d.editBank:BANKS[0]);
   setMode(!!d.songMode);
   restoreTracks(Array.isArray(d.tracks)?d.tracks:[]);   // async — never blocks boot
 }
@@ -1771,7 +1863,7 @@ let bootRestored=false;
 try{ bootRestored=loadProject(); }catch(e){ console.warn("PULSE: restore failed — booting fresh",e); bootRestored=false; }
 restoring=false;
 if(!bootRestored){
-  selectBank("A");
+  selectBank(BANKS[0]);
   applyGen(genFromText(document.getElementById("prompt").value));
 }else{
   document.getElementById("genReadout").innerHTML='↺ project restored from your last session · <span style="color:var(--acc2)">▶ Play</span>';
