@@ -604,6 +604,9 @@
       <span class="vdiv"></span>
       <span class="pill" data-ref="pos-readout" id="posReadout">— · loop</span>
       <span class="pill" data-ref="midi-status"><span class="led" id="midiLed"></span> MIDI: scanning…</span>
+      <span class="vdiv"></span>
+      <button class="small ghost" id="resetProject" data-ref="reset-project" title="Clear the saved project (beat, settings & audio tracks) and start fresh">↺ Reset project</button>
+      <span class="pill" id="saveStatus" data-ref="save-status" style="display:none">saved ✓</span>
     </div>
   </div>
 
@@ -1528,9 +1531,251 @@ function bufferToWav(buffer){
   return new Blob([ab],{type:"audio/wav"});
 }
 
+/* ============================ PERSISTENCE ============================ */
+/* Composition + settings → localStorage (schema {v:1}) · audio clips (imports,
+   mic takes, overdub layers) → IndexedDB as raw Float32 channel data keyed by
+   a per-track uid. Autosave is debounced; restore-on-boot replaces the default
+   generate. Every failure path is soft: corrupt JSON is discarded (fresh boot),
+   a missing/over-quota IndexedDB only skips audio-track restore — the
+   composition always survives. */
+const SAVE_KEY="pulse.project.v1";
+const IDB_NAME="pulse-audio", IDB_STORE="clips";
+let restoring=false, persistDisabled=false, saveTimer=null;
+function genUid(){ return "clip-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,9); }
+
+/* ---- IndexedDB helpers (every failure caught — never breaks boot) ---- */
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    if(!window.indexedDB) return rej(new Error("IndexedDB unavailable"));
+    let rq; try{ rq=indexedDB.open(IDB_NAME,1); }catch(e){ return rej(e); }
+    rq.onupgradeneeded=()=>{ const db=rq.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE,{keyPath:"uid"}); };
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error||new Error("IndexedDB open failed"));
+    rq.onblocked=()=>rej(new Error("IndexedDB blocked"));
+  });
+}
+async function idbPutClip(L){
+  try{
+    const buf=L.player&&L.player.buffer&&L.player.buffer.get&&L.player.buffer.get();
+    if(!buf||!buf.length)return;
+    const channels=[]; for(let c=0;c<buf.numberOfChannels;c++) channels.push(new Float32Array(buf.getChannelData(c)));
+    const db=await idbOpen();
+    try{
+      await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,"readwrite");
+        tx.objectStore(IDB_STORE).put({uid:L.uid,sampleRate:buf.sampleRate,channels});
+        tx.oncomplete=res; tx.onerror=()=>rej(tx.error||new Error("write failed"));
+        tx.onabort=()=>rej(tx.error||new Error("write aborted")); });
+    }finally{ try{db.close();}catch(e){} }
+  }catch(e){ console.warn("PULSE: audio clip not persisted — "+(e&&e.message)); }
+}
+async function idbGetClip(uid){
+  const db=await idbOpen();
+  try{
+    return await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,"readonly");
+      const rq=tx.objectStore(IDB_STORE).get(uid);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error||new Error("read failed")); });
+  }finally{ try{db.close();}catch(e){} }
+}
+async function idbDeleteClip(uid){
+  try{ const db=await idbOpen();
+    try{
+      await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,"readwrite");
+        tx.objectStore(IDB_STORE).delete(uid);
+        tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+    }finally{ try{db.close();}catch(e){} }
+  }catch(e){}
+}
+function idbWipe(){
+  return new Promise(res=>{
+    if(!window.indexedDB) return res();
+    let rq; try{ rq=indexedDB.deleteDatabase(IDB_NAME); }catch(e){ return res(); }
+    rq.onsuccess=rq.onerror=rq.onblocked=()=>res();
+    setTimeout(res,900);                       // never hang the reset on a blocked delete
+  });
+}
+
+/* ---- serialize ---- */
+function mixerLevels(){ const m={};
+  document.querySelectorAll("#mixer .mixch").forEach(ch=>{
+    const k=ch.dataset.mix; if(!k||k.indexOf("smp")===0)return;   // sample-lane faders ride the track records
+    const i=ch.querySelector("input"); if(i)m[k]=+i.value; });
+  return m; }
+function fxAmounts(){ const o={};
+  VFX.forEach(f=>{ const el=f.pad&&f.pad.querySelector(".fx-amt input,.fx-amt select"); if(el)o[f.id]=el.value; });
+  return o; }
+function serializeProject(){
+  const $=id=>document.getElementById(id);
+  return { v:1, t:Date.now(),
+    banks:BANKS.reduce((o,b)=>{ const B=banks[b];
+      o[b]={patt:INSTS.reduce((p,i)=>{p[i]=[...B.patt[i]];return p;},{}),
+            bassNotes:[...B.bassNotes],perc:[...(B.perc||Array(STEPS).fill(0))],
+            pluckNotes:[...(B.pluckNotes||Array(STEPS).fill(null))],
+            genre:B.genre||null,filled:!!B.filled};
+      return o;},{}),
+    song:song.map(s=>({bank:s.bank,bars:s.bars})),
+    editBank:state.editBank, songMode:state.songMode,
+    key:state.key, scale:state.scale,
+    bpm:+$("bpm").value||120, swing:+$("swing").value||0,
+    keyLock:$("keyLock").checked, blockBars:+$("blockBars").value||4,
+    prompt:$("prompt").value, genreSel:genreSelect.value,
+    bankGenres:BANKS.reduce((o,b)=>{o[b]=bankGenreSel[b]?bankGenreSel[b].value:"";return o;},{}),
+    master:+$("master").value, glide:bass.portamento,
+    mixer:mixerLevels(), fx:fxAmounts(),
+    tracks:sampleLanes.map(L=>({uid:L.uid||null,name:L.name,kind:L.kind,steps:[...L.steps],
+      loopMode:!!L.loopMode,
+      vol:isFinite(L.vol.volume.value)?Math.round(L.vol.volume.value*10)/10:-4,
+      pan:isFinite(L.pan.pan.value)?Math.round(L.pan.pan.value*100)/100:0,
+      muted:!!L.muted,solo:!!L.solo}))
+  };
+}
+
+/* ---- save (debounced autosave + lifecycle flush) ---- */
+const saveStatusEl=document.getElementById("saveStatus");
+function flashSaved(ok){
+  if(!saveStatusEl)return;
+  saveStatusEl.style.display=""; saveStatusEl.textContent=ok?"saved ✓":"⚠ save failed";
+  saveStatusEl.style.color=ok?"var(--acc2)":"var(--hot)";
+  clearTimeout(flashSaved._t); flashSaved._t=setTimeout(()=>{saveStatusEl.style.display="none";},1800);
+}
+function saveNow(){
+  if(restoring||persistDisabled)return;
+  try{ localStorage.setItem(SAVE_KEY,JSON.stringify(serializeProject())); flashSaved(true); }
+  catch(e){ flashSaved(false); }
+}
+function scheduleSave(){
+  if(restoring||persistDisabled)return;
+  clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,500);
+}
+/* autosave triggers: every control input/change (BPM, swing, key, faders, FX
+   amounts, prompt, track name/vol/pan…) + composition clicks (cells, banks,
+   song blocks, chips, mute/solo, loop toggles…) — all debounced. */
+["input","change"].forEach(ev=>document.addEventListener(ev,()=>scheduleSave(),true));
+document.addEventListener("click",e=>{
+  if(e.target&&e.target.closest&&e.target.closest("button,.cell,.block,.chip,.lp,.x,.tdel,.del,.tbtn"))scheduleSave();
+},true);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden"){ clearTimeout(saveTimer); saveNow(); } });
+addEventListener("beforeunload",()=>{ clearTimeout(saveTimer); saveNow(); });
+
+/* generation rewrites a whole bank → save (wrapper: call sites bind at runtime) */
+const coreApplyGen=applyGen;
+applyGen=function(r,bank){ coreApplyGen(r,bank); scheduleSave(); };
+/* new tracks write their audio to IndexedDB once, at creation; deletes clean up */
+const coreAddSampleLane=addSampleLane;
+addSampleLane=function(name,toneBuffer,loopDefault,kind,opts){
+  const L=coreAddSampleLane(name,toneBuffer,loopDefault,kind);
+  L.uid=(opts&&opts.uid)||genUid();
+  if(!(opts&&opts.skipPersist)){ idbPutClip(L); scheduleSave(); }
+  return L;
+};
+const coreRemoveSampleLane=removeSampleLane;
+removeSampleLane=function(L,laneEl){ coreRemoveSampleLane(L,laneEl); if(L&&L.uid)idbDeleteClip(L.uid); scheduleSave(); };
+
+/* ---- restore (aggressively validated so partial/corrupt data can't wedge boot) ---- */
+function numArr16(a){ const out=Array(STEPS).fill(0);
+  if(Array.isArray(a))for(let i=0;i<STEPS;i++){ const v=+a[i]; if(isFinite(v)&&v>0)out[i]=Math.min(3,Math.round(v)); }
+  return out; }
+function noteArr16(a){ const out=Array(STEPS).fill(null);
+  if(Array.isArray(a))for(let i=0;i<STEPS;i++){ if(typeof a[i]==="string"&&/^[A-G]#?\d$/.test(a[i]))out[i]=a[i]; }
+  return out; }
+function applyProject(d){
+  BANKS.forEach(b=>{ const s=d.banks&&d.banks[b]; if(!s)return;
+    const B={patt:emptyPatt(),bassNotes:noteArr16(s.bassNotes),perc:numArr16(s.perc),
+             pluckNotes:noteArr16(s.pluckNotes),genre:typeof s.genre==="string"?s.genre:null,filled:!!s.filled};
+    INSTS.forEach(i=>B.patt[i]=numArr16(s.patt&&s.patt[i]));
+    banks[b]=B; });
+  song.length=0;
+  if(Array.isArray(d.song))d.song.forEach(x=>{ if(x&&BANKS.indexOf(x.bank)>=0)
+    song.push({bank:x.bank,bars:Math.min(16,Math.max(1,Math.round(+x.bars)||4))}); });
+  if(CHROM.indexOf(d.key)>=0){ state.key=d.key; document.getElementById("key").value=d.key; }
+  if(d.scale==="minor"||d.scale==="major"){ state.scale=d.scale; document.getElementById("scale").value=d.scale; }
+  const bpm=Math.min(220,Math.max(40,+d.bpm||120));
+  document.getElementById("bpm").value=bpm; Tone.Transport.bpm.value=bpm;
+  const sw=Math.min(70,Math.max(0,+d.swing||0));
+  document.getElementById("swing").value=sw; Tone.Transport.swing=sw/100;
+  document.getElementById("keyLock").checked=d.keyLock!==false;
+  document.getElementById("blockBars").value=Math.min(16,Math.max(1,Math.round(+d.blockBars)||4));
+  if(typeof d.prompt==="string")document.getElementById("prompt").value=d.prompt;
+  if(typeof d.genreSel==="string"&&(!d.genreSel||GENRES[d.genreSel]))genreSelect.value=d.genreSel;
+  BANKS.forEach(b=>{ const g=d.bankGenres&&d.bankGenres[b];
+    if(bankGenreSel[b])bankGenreSel[b].value=GENRES[g]?g:""; });
+  if(isFinite(+d.master)){ const mv=Math.min(0,Math.max(-40,+d.master));
+    document.getElementById("master").value=mv; masterVol.volume.value=mv; }
+  if(isFinite(+d.glide))bass.portamento=Math.min(0.3,Math.max(0,+d.glide));
+  if(d.mixer&&typeof d.mixer==="object")Object.keys(d.mixer).forEach(k=>{
+    const v=+d.mixer[k]; if(!isFinite(v))return;
+    const node=k==="vocal"?vocalVol:(chan[k]&&chan[k].vol); if(!node)return;
+    const vv=Math.min(6,Math.max(-40,v)); node.volume.value=vv;
+    const inp=document.querySelector('[data-mix="'+k+'"] input'); if(inp)inp.value=vv; });
+  if(d.fx&&typeof d.fx==="object")VFX.forEach(f=>{
+    if(!(f.id in d.fx))return;
+    const el=f.pad&&f.pad.querySelector(".fx-amt input,.fx-amt select"); if(!el)return;
+    if(f.amt){ const n=+d.fx[f.id]; if(!isFinite(n))return;
+      const v=Math.min(f.amt.max,Math.max(f.amt.min,n)); el.value=v; f.amt.set(v,f); }
+    else if(f.sel){ const v=String(d.fx[f.id]);
+      if(f.sel.options.some(o=>o[0]===v)){ el.value=v; f.sel.set(v,f); } } });
+  selectBank(BANKS.indexOf(d.editBank)>=0?d.editBank:"A");
+  setMode(!!d.songMode);
+  restoreTracks(Array.isArray(d.tracks)?d.tracks:[]);   // async — never blocks boot
+}
+async function restoreTracks(list){
+  if(!list.length)return;
+  for(const t of list){
+    try{
+      if(!t||!t.uid)continue;
+      const clip=await idbGetClip(t.uid);
+      if(!clip||!clip.channels||!clip.channels.length||!clip.channels[0].length)continue;
+      const ctx=Tone.getContext().rawContext;
+      const buf=ctx.createBuffer(clip.channels.length,clip.channels[0].length,clip.sampleRate||ctx.sampleRate);
+      clip.channels.forEach((chd,c)=>buf.getChannelData(c).set(chd instanceof Float32Array?chd:new Float32Array(chd)));
+      const L=addSampleLane(String(t.name||"Track"),new Tone.ToneAudioBuffer(buf),!!t.loopMode,
+                            TKIND[t.kind]?t.kind:"sample",{uid:t.uid,skipPersist:true});
+      numArr16(t.steps).forEach((v,s)=>L.steps[s]=v?1:0);
+      if(isFinite(+t.vol)){ const vv=Math.min(6,Math.max(-40,+t.vol)); L.vol.volume.value=vv;
+        const mi=document.querySelector('[data-mix="'+L.id+'"] input'); if(mi)mi.value=vv;
+        const rv=L.rowEl&&L.rowEl.querySelector('input[data-ref="track-vol"]'); if(rv)rv.value=vv; }
+      if(isFinite(+t.pan)){ const pv=Math.min(1,Math.max(-1,+t.pan)); L.pan.pan.value=pv;
+        const rp=L.rowEl&&L.rowEl.querySelector('input[data-ref="track-pan"]'); if(rp)rp.value=Math.round(pv*100); }
+      L.muted=!!t.muted; L.solo=!!t.solo;
+    }catch(e){ console.warn("PULSE: skipped a saved audio track — "+(e&&e.message)); }
+  }
+  applyMuteSolo(); syncCells();
+}
+function loadProject(){
+  let raw=null;
+  try{ raw=localStorage.getItem(SAVE_KEY); }catch(e){ return false; }
+  if(!raw)return false;
+  let d=null;
+  try{ d=JSON.parse(raw); }catch(e){ try{localStorage.removeItem(SAVE_KEY);}catch(_){} return false; }
+  if(!d||d.v!==1)return false;                 // unknown schema → skip cleanly, boot fresh
+  try{ applyProject(d); return true; }
+  catch(e){ console.warn("PULSE: saved project failed to apply — booting fresh",e);
+    try{localStorage.removeItem(SAVE_KEY);}catch(_){} return false; }
+}
+
+/* ---- reset project ---- */
+document.getElementById("resetProject").onclick=async()=>{
+  if(!confirm("Reset project? This clears the saved beat, settings and audio tracks."))return;
+  persistDisabled=true; clearTimeout(saveTimer);
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  await idbWipe();
+  location.reload();
+};
+
 /* ============================ BOOT ============================ */
-selectBank("A");
-applyGen(genFromText(document.getElementById("prompt").value));
+/* Restore the saved project when one exists — otherwise keep the classic
+   default generate. The guard means a restored project is never overwritten
+   by the boot generate; any restore failure falls back to a fresh boot. */
+restoring=true;
+let bootRestored=false;
+try{ bootRestored=loadProject(); }catch(e){ console.warn("PULSE: restore failed — booting fresh",e); bootRestored=false; }
+restoring=false;
+if(!bootRestored){
+  selectBank("A");
+  applyGen(genFromText(document.getElementById("prompt").value));
+}else{
+  document.getElementById("genReadout").innerHTML='↺ project restored from your last session · <span style="color:var(--acc2)">▶ Play</span>';
+}
 renderSong();
 updatePos(0);
 </script>
