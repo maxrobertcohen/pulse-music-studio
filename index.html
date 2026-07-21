@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>PULSE — Electronic Music Studio</title>
+<title>PULSE — Beat &amp; Voice Performance Studio</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -438,6 +438,71 @@
     padding:3px 7px;box-shadow:var(--inset-ctl);max-width:100%;overflow:hidden;text-overflow:ellipsis;
   }
 
+  /* ---------------- vocal booth + fx rack ---------------- */
+  .panel.vocal{
+    border-color:rgba(255,77,109,.34);
+    background:
+      radial-gradient(620px 210px at 10% -25%, rgba(255,77,109,.11), transparent 62%),
+      radial-gradient(560px 220px at 90% -30%, rgba(123,104,255,.11), transparent 60%),
+      linear-gradient(180deg,var(--surface-2) 0%,var(--surface-1) 100%);
+    box-shadow:var(--shadow-panel), 0 0 38px -14px rgba(255,77,109,.35);
+  }
+  .panel.vocal h2 .idx{color:var(--hot-hi)}
+  .fxrack{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:11px;margin-top:16px;
+  }
+  .fxpad{
+    --fxc:var(--acc);
+    display:flex;flex-direction:column;gap:8px;padding:9px;border-radius:var(--r-m);
+    background:linear-gradient(180deg,var(--surface-3),var(--surface-1));
+    border:1px solid var(--line);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 3px 8px rgba(0,0,0,.35);
+  }
+  .fx-hit{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    min-height:88px;border-radius:var(--r-s);cursor:pointer;
+    user-select:none;-webkit-user-select:none;touch-action:none;
+    background:linear-gradient(180deg,#1c2133,#12151f);
+    border:1px solid var(--line);box-shadow:var(--inset-ctl);
+    transition:background .12s,border-color .12s,box-shadow .15s,transform .08s var(--ease),filter .1s;
+  }
+  .fx-hit:hover{border-color:color-mix(in srgb,var(--fxc) 60%,var(--line));
+    box-shadow:var(--inset-ctl), 0 0 12px -3px color-mix(in srgb,var(--fxc) 40%,transparent)}
+  .fx-led{
+    position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#4b526b,#232838 72%);
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.65);
+  }
+  .fx-name{font:700 13.5px var(--font-ui);letter-spacing:.09em;color:var(--txt-2);text-transform:uppercase;pointer-events:none}
+  .fx-tag{font:500 9px var(--font-mono);letter-spacing:.08em;color:var(--dim);pointer-events:none}
+  .fx-mode{font:500 8px var(--font-mono);letter-spacing:.06em;color:var(--faint);margin-top:3px;pointer-events:none}
+  .fxpad.on .fx-hit,.fxpad.held .fx-hit{
+    background-color:var(--fxc);
+    background-image:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.06) 45%,rgba(0,0,0,.24));
+    border-color:color-mix(in srgb,var(--fxc) 55%,#000);
+    box-shadow:0 0 20px -3px color-mix(in srgb,var(--fxc) 60%,transparent), inset 0 1px 0 rgba(255,255,255,.38);
+  }
+  .fxpad.held .fx-hit{ /* momentary throw: squeeze + teal ring so it reads differently from latch */
+    transform:scale(.965);filter:brightness(1.12);
+    box-shadow:0 0 0 2px var(--acc2), 0 0 22px -2px color-mix(in srgb,var(--fxc) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .fxpad.on .fx-name,.fxpad.held .fx-name{color:#0b0c14}
+  .fxpad.on .fx-tag,.fxpad.held .fx-tag,
+  .fxpad.on .fx-mode,.fxpad.held .fx-mode{color:rgba(10,12,20,.72)}
+  .fxpad.on .fx-led,.fxpad.held .fx-led{
+    background:radial-gradient(circle at 35% 30%,#fff,#e9fff8 55%,#9df3dd);
+    box-shadow:0 0 8px rgba(255,255,255,.85), inset 0 0 2px rgba(255,255,255,.6);
+  }
+  .fx-amt{display:flex;align-items:center;gap:7px;padding:0 3px 1px}
+  .fx-amt label{font:600 8px var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);flex:none;width:36px}
+  .fx-amt input[type=range]{flex:1;min-width:0}
+  .fx-amt select{
+    flex:1;min-width:0;cursor:pointer;
+    background:var(--surface-0);border:1px solid var(--line);color:var(--txt-2);
+    border-radius:var(--r-xs);padding:4px 6px;font:600 10px var(--font-mono);box-shadow:var(--inset-ctl);
+  }
+
   /* ---------------- misc ---------------- */
   .hint{font:400 11.5px/1.6 var(--font-ui);color:var(--dim);margin-top:10px}
   .hint b{color:var(--txt-2)}
@@ -461,10 +526,10 @@
       </div>
       <div class="brand-txt">
         <h1 data-ref="app-title">PULSE<span class="b">.</span></h1>
-        <div class="sub tagline">Electronic Music Studio · Slice 2</div>
+        <div class="sub tagline">Make a fly beat · sing &amp; tell stories over it</div>
       </div>
     </div>
-    <span class="badge" data-ref="slice-badge">arrange · mic · import · export</span>
+    <span class="badge" data-ref="slice-badge">beat → voice → fx → record</span>
   </header>
 
   <!-- TRANSPORT -->
@@ -494,9 +559,25 @@
     </div>
   </div>
 
+  <!-- VOCAL BOOTH — the star of the show -->
+  <div class="panel vocal" data-ref="mic-panel">
+    <h2><span class="idx">01</span> Vocal booth <span class="sub">arm the mic · perform over the beat · throw fx</span></h2>
+    <div class="transport" data-ref="mic-controls">
+      <button id="armMic" class="primary" data-ref="arm-mic">🎤 Arm mic</button>
+      <button id="recMic" data-ref="rec-mic" disabled>● Record take</button>
+      <label class="pill" title="Hear your voice (with FX) in the mix. Wear headphones."><input type="checkbox" id="monMic" checked/> monitor voice</label>
+      <span class="pill"><span class="led" id="micLed"></span> <span id="micStat">not armed</span></span>
+      <span class="vdiv"></span>
+      <span class="pill">🎧 <b>use headphones</b> — your voice is live in the mix &amp; in the WAV export</span>
+    </div>
+    <div class="fxrack" id="fxRack" data-ref="vocal-rack"></div>
+    <div class="hint"><b>Tap</b> a pad to latch an effect on/off · <b>press &amp; hold</b> to throw it only while held (release = clean voice).
+      “● Record take” captures your voice <b>with FX</b> as a looping lane, synced to the beat. Voice level lives on the <b>VOICE</b> fader in the mixer.</div>
+  </div>
+
   <!-- GENERATOR -->
   <div class="panel" data-ref="generator-panel">
-    <h2><span class="idx">01</span> Beat generator <span class="sub">natural language → selected bank</span></h2>
+    <h2><span class="idx">02</span> Beat generator <span class="sub">natural language → selected bank</span></h2>
     <div class="genwrap">
       <textarea id="prompt" data-ref="nl-prompt" placeholder="Describe a beat…">128 bpm driving techno, four-on-the-floor, off-beat open hats, dark rolling bassline</textarea>
       <button class="primary gen" id="genBtn" data-ref="generate-btn">✨ Generate</button>
@@ -514,7 +595,7 @@
 
   <!-- ARRANGEMENT -->
   <div class="panel" data-ref="arrangement-panel">
-    <h2><span class="idx">02</span> Arrangement <span class="sub">banks &amp; song timeline</span></h2>
+    <h2><span class="idx">03</span> Arrangement <span class="sub">banks &amp; song timeline</span></h2>
     <div class="banks">
       <span class="banks-lbl">Bank</span>
       <button class="bankbtn active" data-bank="A">A</button>
@@ -537,7 +618,7 @@
 
   <!-- SEQUENCER -->
   <div class="panel" data-ref="sequencer-panel">
-    <h2><span class="idx">03</span> Step sequencer <span class="sub">editing bank <b id="editBankLbl">A</b></span></h2>
+    <h2><span class="idx">04</span> Step sequencer <span class="sub">editing bank <b id="editBankLbl">A</b></span></h2>
     <div class="stepnums" id="stepnums"></div>
     <div class="seq" id="grid" data-ref="step-grid"></div>
   </div>
@@ -545,29 +626,18 @@
   <div class="row">
     <!-- SAMPLING / IMPORT -->
     <div class="panel col" data-ref="sampler-panel">
-      <h2><span class="idx">04</span> Import audio <span class="sub">file → track</span></h2>
+      <h2><span class="idx">05</span> Import audio <span class="sub">file → track</span></h2>
       <div class="drop" id="drop" data-ref="import-drop">⬇ Drop an audio file here, or click to choose<br><span class="sub">wav · mp3 · m4a · ogg — becomes a new sequencer lane (loop-toggle for a full track)</span></div>
       <input type="file" id="fileInput" accept="audio/*" style="display:none"/>
     </div>
-    <!-- MIC -->
-    <div class="panel col" data-ref="mic-panel">
-      <h2><span class="idx">05</span> Mic input <span class="sub">record takes</span></h2>
-      <div class="transport">
-        <button id="armMic" data-ref="arm-mic">🎤 Arm mic</button>
-        <button id="recMic" data-ref="rec-mic" disabled>● Record take</button>
-        <label class="pill"><input type="checkbox" id="monMic"/> monitor</label>
-        <span class="pill"><span class="led" id="micLed"></span> <span id="micStat">not armed</span></span>
-      </div>
-      <div class="hint">A recorded take is added as a looping audio track, synced to the transport.</div>
-    </div>
-  </div>
-
-  <div class="row">
     <!-- SYNTH -->
     <div class="panel wide" data-ref="keyboard-panel">
       <h2><span class="idx">06</span> Synth <span class="sub">mouse · qwerty (A–K) · midi</span></h2>
       <div class="keys" id="keys" data-ref="piano-keys"></div>
     </div>
+  </div>
+
+  <div class="row">
     <!-- EXPORT -->
     <div class="panel exp" data-ref="export-panel">
       <h2><span class="idx">07</span> Export <span class="sub">bounce to wav</span></h2>
@@ -575,18 +645,17 @@
         <button id="exportBtn" class="rec" data-ref="export-btn">● Record output</button>
         <span class="pill"><span class="led" id="expLed"></span> <span id="expStat">idle</span></span>
       </div>
-      <div class="hint">Captures everything you hear (beats, synth, samples, mic) live → downloads a <b>.wav</b>. Hit Play, record a pass, stop to save.</div>
+      <div class="hint">Captures everything you hear — beat, samples, synth, and your <b>voice with FX</b> — live → downloads a <b>.wav</b>. Hit Play, perform a pass, stop to save.</div>
+    </div>
+    <!-- MIXER -->
+    <div class="panel col" data-ref="mixer-panel">
+      <h2><span class="idx">08</span> Mixer <span class="sub">channel levels · VOICE = your mic</span></h2>
+      <div class="mixrow" id="mixer"></div>
     </div>
   </div>
 
-  <!-- MIXER -->
-  <div class="panel" data-ref="mixer-panel">
-    <h2><span class="idx">08</span> Mixer <span class="sub">channel levels</span></h2>
-    <div class="mixrow" id="mixer"></div>
-  </div>
-
   <div class="foot" data-ref="footer">
-    PULSE slice 2 · arrangement · mic · import · export · engine live ·
+    PULSE · beat &amp; voice performance studio · vocal fx rack · arrangement · import · export · engine live ·
     natural-language generation on-device (live-Claude call slots in at slice 3)
   </div>
 </div>
@@ -871,24 +940,118 @@ async function loadAudioFile(file){
   }catch(err){ drop.innerHTML="⚠ couldn't decode that file<br><span class='sub'>try wav/mp3/m4a</span>"; }
 }
 
-/* ============================ MIC ============================ */
-let micUser=null, micRec=null, micMonGain=null, micRecording=false;
+/* ============================ VOCAL CHANNEL + FX RACK ============================ */
+/* Signal path:  micUser → vocalIn → pitch → telephone → grit → doubler → echo →
+                 reverb → sweep → fxOut → micMonGain(monitor gate) → vocalVol → masterVol
+   fxOut also feeds micRec, so "Record take" captures the voice WITH its FX.
+   masterVol → glue → master → destination + exportRec, so the voice lands in the WAV. */
+const vocalIn=new Tone.Gain(1);
+const vPitch=new Tone.PitchShift({pitch:12,windowSize:0.08,wet:0});
+/* telephone = bandpass + bitcrush, wrapped in a crossfade so it gets a rampable wet */
+const telIn=new Tone.Gain(1), telXf=new Tone.CrossFade(0);
+const telBP=new Tone.Filter({type:"bandpass",frequency:1700,Q:2.4});
+const telCrush=new Tone.BitCrusher(6);
+telIn.connect(telXf.a); telIn.chain(telBP,telCrush,telXf.b);
+const vDist=new Tone.Distortion({distortion:0.55,wet:0});
+const vChorus=new Tone.Chorus({frequency:1.15,delayTime:9,depth:0.55,spread:180,wet:0}).start();
+const vDelay=new Tone.FeedbackDelay({delayTime:"8n",feedback:0.38,wet:0});
+const vReverb=new Tone.Reverb({decay:2.8,preDelay:0.02,wet:0});
+const vSweep=new Tone.AutoFilter({frequency:1.2,baseFrequency:160,octaves:4,depth:1,wet:0}).start();
+const fxOut=new Tone.Gain(1);
+vocalIn.connect(vPitch); vPitch.connect(telIn); telXf.connect(vDist);
+vDist.chain(vChorus,vDelay,vReverb,vSweep,fxOut);
+const micMonGain=new Tone.Gain(1);                 // monitor on/off gate (monMic checkbox)
+const vocalVol=new Tone.Volume(-2).connect(masterVol); // VOICE fader in the mixer
+fxOut.connect(micMonGain); micMonGain.connect(vocalVol);
+addMixerChannel("vocal","VOICE",vocalVol);
+
+/* FX descriptors: wet = rampable Signal · target = wet level when engaged */
+const VFX=[
+  {id:"reverb",name:"Reverb",tag:"hall space",color:"#7b68ff",wet:vReverb.wet,target:0.5,
+    amt:{label:"mix",min:10,max:90,value:50,set:(v,f)=>{f.target=v/100;}}},
+  {id:"delay",name:"Echo",tag:"⅛-note throw",color:"#2be5c0",wet:vDelay.wet,target:0.42,
+    amt:{label:"fdbk",min:5,max:80,value:38,set:v=>{vDelay.feedback.rampTo(v/100,0.05);}}},
+  {id:"doubler",name:"Doubler",tag:"thick chorus",color:"#4dd4ff",wet:vChorus.wet,target:0.65,
+    amt:{label:"depth",min:10,max:100,value:55,set:v=>{vChorus.depth=v/100;}}},
+  {id:"telephone",name:"Telephone",tag:"lo-fi band",color:"#ffd166",wet:telXf.fade,target:1,
+    amt:{label:"crush",min:0,max:100,value:35,set:v=>{const bits=Math.round(8-(v/100)*6);
+      try{telCrush.bits.value=bits;}catch(e){try{telCrush.bits=bits;}catch(_){}}}}},
+  {id:"grit",name:"Grit",tag:"distortion",color:"#ff6b6b",wet:vDist.wet,target:1,
+    amt:{label:"drive",min:5,max:100,value:55,set:v=>{vDist.distortion=v/100;}}},
+  {id:"pitch",name:"Pitch",tag:"shift · not autotune",color:"#c77dff",wet:vPitch.wet,target:1,
+    sel:{label:"intv",value:"12",options:[["12","+12 chipmunk"],["7","+7 harmony"],["-5","−5 harmony"],["-12","−12 demon"]],
+      set:(v,f)=>{vPitch.pitch=+v; f.target=Math.abs(+v)===12?1:0.55;}}},
+  {id:"sweep",name:"Sweep",tag:"filter build-up",color:"#ffa14d",wet:vSweep.wet,target:1,
+    amt:{label:"rate",min:2,max:80,value:12,set:v=>{vSweep.frequency.rampTo(v/10,0.05);}}},
+];
+function fxApply(f){
+  const on=f.latched||f.held;
+  f.wet.rampTo(on?f.target:0, on?0.05:0.14);   // fast in, slightly slower tail out
+  f.pad.classList.toggle("on",f.latched);
+  f.pad.classList.toggle("held",f.held);
+}
+const fxRack=document.getElementById("fxRack");
+VFX.forEach(f=>{
+  f.latched=false; f.held=false; f._down=0;
+  const pad=document.createElement("div"); pad.className="fxpad";
+  pad.dataset.ref="fx-"+f.id; pad.style.setProperty("--fxc",f.color);
+  const hit=document.createElement("div"); hit.className="fx-hit";
+  hit.innerHTML='<span class="fx-led"></span><span class="fx-name">'+f.name+'</span>'+
+    '<span class="fx-tag">'+f.tag+'</span><span class="fx-mode">tap = latch · hold = throw</span>';
+  pad.appendChild(hit);
+  const row=document.createElement("div"); row.className="fx-amt";
+  const lb=document.createElement("label"); lb.textContent=(f.amt||f.sel).label; row.appendChild(lb);
+  if(f.amt){
+    const r=document.createElement("input"); r.type="range";
+    r.min=f.amt.min; r.max=f.amt.max; r.value=f.amt.value;
+    r.oninput=()=>{ f.amt.set(+r.value,f); fxApply(f); };
+    row.appendChild(r); f.amt.set(f.amt.value,f);
+  }else if(f.sel){
+    const s=document.createElement("select");
+    f.sel.options.forEach(([v,txt])=>{ const o=document.createElement("option"); o.value=v; o.textContent=txt; s.appendChild(o); });
+    s.value=f.sel.value;
+    s.onchange=()=>{ f.sel.set(s.value,f); fxApply(f); };
+    row.appendChild(s); f.sel.set(f.sel.value,f);
+  }
+  pad.appendChild(row); fxRack.appendChild(pad); f.pad=pad;
+  /* tap = latch toggle · hold = momentary throw. Engage instantly on pointerdown;
+     on release, a short press (<260ms) counts as a tap and flips the latch. */
+  hit.addEventListener("pointerdown",e=>{
+    e.preventDefault(); ensureAudio();
+    try{hit.setPointerCapture(e.pointerId);}catch(_){}
+    f._down=performance.now(); f.held=true; fxApply(f);
+  });
+  const release=e=>{
+    if(!f._down)return;
+    const dur=performance.now()-f._down; f._down=0; f.held=false;
+    if(e.type==="pointerup"&&dur<260) f.latched=!f.latched;
+    fxApply(f);
+  };
+  ["pointerup","pointercancel","pointerleave","lostpointercapture"]
+    .forEach(ev=>hit.addEventListener(ev,release));
+});
+
+/* ---- mic arm / take ---- */
+let micUser=null, micRec=null, micRecording=false;
 const armMic=document.getElementById("armMic"),recMic=document.getElementById("recMic"),micLed=document.getElementById("micLed"),micStat=document.getElementById("micStat"),monMic=document.getElementById("monMic");
+monMic.onchange=()=>micMonGain.gain.rampTo(monMic.checked?1:0,0.05);
+micMonGain.gain.value=monMic.checked?1:0;
 armMic.onclick=async()=>{
+  if(micUser)return;                       // already armed
   await ensureAudio();
   try{
-    micUser=new Tone.UserMedia(); await micUser.open();
-    micMonGain=new Tone.Gain(0).connect(masterVol); micUser.connect(micMonGain);
-    micRec=new Tone.Recorder(); micUser.connect(micRec);
-    micLed.classList.add("on"); micStat.textContent="armed"; recMic.disabled=false; armMic.textContent="🎤 Mic armed";
-    monMic.onchange=()=>micMonGain.gain.rampTo(monMic.checked?1:0,0.05);
-  }catch(e){ micStat.textContent="permission denied"; }
+    const um=new Tone.UserMedia(); await um.open();
+    micUser=um; micUser.connect(vocalIn);  // into the vocal FX chain → mix → export
+    micRec=new Tone.Recorder(); fxOut.connect(micRec); // takes are post-FX
+    micLed.classList.add("on"); micStat.textContent="live — perform"; recMic.disabled=false;
+    armMic.textContent="🎤 Mic live"; armMic.classList.remove("primary"); armMic.classList.add("playing");
+  }catch(e){ micStat.textContent="permission denied"; micUser=null; }
 };
 recMic.onclick=async()=>{
   if(!micRec)return;
-  if(!micRecording){ micRec.start(); micRecording=true; recMic.textContent="■ Stop take"; recMic.classList.add("rec"); micLed.classList.remove("on");micLed.classList.add("hot"); micStat.textContent="recording…"; }
+  if(!micRecording){ micRec.start(); micRecording=true; recMic.textContent="■ Stop take"; recMic.classList.add("rec"); micLed.classList.remove("on");micLed.classList.add("hot"); micStat.textContent="recording take…"; }
   else{
-    const blob=await micRec.stop(); micRecording=false; recMic.textContent="● Record take"; recMic.classList.remove("rec"); micLed.classList.remove("hot");micLed.classList.add("on"); micStat.textContent="armed";
+    const blob=await micRec.stop(); micRecording=false; recMic.textContent="● Record take"; recMic.classList.remove("rec"); micLed.classList.remove("hot");micLed.classList.add("on"); micStat.textContent="live — perform";
     const arr=await blob.arrayBuffer(); const audioBuf=await Tone.getContext().rawContext.decodeAudioData(arr);
     addSampleLane("Mic "+(sampleLanes.filter(l=>l.name.startsWith("Mic")).length+1), new Tone.ToneAudioBuffer(audioBuf), true);
     syncCells();
