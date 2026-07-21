@@ -53,6 +53,11 @@
 
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
+  /* kill long-press text-selection / iOS callout on all interactive controls (was breaking the keyboard) */
+  button,.key,.keys,.cell,.fxpad,.chip,.bankbtn,.block,.lp,.seg,.mixch,.drop,.lane-head,.pill,.badge,.stepnums{
+    -webkit-touch-callout:none;-webkit-user-select:none;-moz-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+  .key,.cell,.fxpad{touch-action:none;}
   body{
     color:var(--txt);
     font:400 13.5px/1.5 var(--font-ui);
@@ -937,7 +942,11 @@ for(let i=0;i<7;i++){
 }
 {const note="C"+(keyOct+1);const w=document.createElement("div");w.className="key white";w.style.left=(7*whiteW)+"px";
  w.innerHTML='<span class="lbl">K</span>';bindKey(w,note);keysEl.appendChild(w);keyByNote[note]=w;}
-function bindKey(el,note){el.addEventListener("mousedown",()=>noteOn(note));["mouseup","mouseleave"].forEach(e=>el.addEventListener(e,()=>noteOff(note)));}
+function bindKey(el,note){
+  el.addEventListener("pointerdown",e=>{ e.preventDefault(); try{el.setPointerCapture(e.pointerId);}catch(_){} noteOn(note); });
+  ["pointerup","pointercancel","lostpointercapture"].forEach(ev=>el.addEventListener(ev,()=>noteOff(note)));
+  el.addEventListener("contextmenu",e=>e.preventDefault()); // block long-press callout menu
+}
 async function ensureAudio(){ if(Tone.context.state!=="running") await Tone.start(); }
 function noteOn(note,vel){ ensureAudio(); lead.triggerAttack(note,undefined,vel||0.8); if(keyByNote[note])keyByNote[note].classList.add("down"); }
 function noteOff(note){ lead.triggerRelease(note); if(keyByNote[note])keyByNote[note].classList.remove("down"); }
