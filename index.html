@@ -589,8 +589,21 @@
       <span class="chip" data-p="174 bpm drum and bass, breakbeat, fast reese bass">dnb</span>
       <span class="chip" data-p="132 bpm dark techno, driving kick, off-beat open hats, rolling bass">techno</span>
       <span class="chip" data-p="75 bpm lofi, swung, soft kick, mellow bass, major">lofi</span>
+      <span class="chip" data-ref="chip-jersey" data-p="140 bpm jersey club, five-kick bounce, bed squeak, syncopated claps, hat rolls, gliding 808">jersey club 🔥</span>
+      <span class="chip" data-ref="chip-dakiti" data-p="110 bpm dakiti-style reggaeton, dembow rim pattern, deep sub, watery synth pluck, spacious">dakiti-style</span>
+      <span class="chip" data-ref="chip-drill" data-p="144 bpm drill, sliding 808, late snares, skippy hats, dark minor">drill</span>
+      <span class="chip" data-p="104 bpm afrobeats, syncopated kick, rim accents, warm rolling bass">afrobeats</span>
+      <span class="chip" data-p="112 bpm amapiano, log drum bass, shaker hats, spacious groove">amapiano</span>
+      <span class="chip" data-p="122 bpm french house, filtered disco four on the floor, syncopated funk bass, daft punk energy">french house</span>
+    </div>
+    <div class="transport" style="margin-top:12px" data-ref="genre-tools">
+      <div class="ctl"><label>Genre library</label>
+        <select id="genreSelect" data-ref="genre-select" style="width:172px"><option value="">browse all genres…</option></select></div>
+      <label class="pill" data-ref="key-lock-pill" title="Key Lock keeps every generated genre in the current project key & scale — switch beats completely mid-song and stay in tune. Off: a preset may set its own key (Dakiti-style → E minor).">
+        <input type="checkbox" id="keyLock" checked data-ref="key-lock"/> 🔒 key lock</label>
     </div>
     <div class="sub readout" id="genReadout" data-ref="gen-readout"></div>
+    <div class="hint" data-ref="tempo-hint">One project tempo: in <b>Loop</b> mode a preset sets its suggested BPM · in <b>Song</b> mode generating keeps the transport BPM so mid-song genre switches stay coherent. <b>🔒 Key lock</b> keeps every bank in the same key so the beat can change completely and stay in tune.</div>
   </div>
 
   <!-- ARRANGEMENT -->
@@ -611,6 +624,9 @@
       <button class="small" data-add="C">+C</button>
       <button class="small" data-add="D">+D</button>
       <button class="small ghost" id="clearSong">clear</button>
+    </div>
+    <div class="banks" style="margin-top:11px" id="bankGenres" data-ref="bank-genres">
+      <span class="banks-lbl" title="Set a genre per bank — with Key Lock on they all share the project key, so chaining them in Song mode changes the beat completely but stays in tune.">Bank genre</span>
     </div>
     <div class="song" id="songLane" data-ref="song-lane"><span class="sub" id="songEmpty">Song is empty — set a bank, then “+A / +B…” to chain sections. Switch to <b>Song</b> mode to play it.</span></div>
     <div class="hint" id="songLen"></div>
@@ -666,7 +682,7 @@ const STEPS=16;
 const INSTS=["kick","snare","hat","clap","bass"];
 const BANKS=["A","B","C","D"];
 function emptyPatt(){ return {kick:Array(STEPS).fill(0),snare:Array(STEPS).fill(0),hat:Array(STEPS).fill(0),clap:Array(STEPS).fill(0),bass:Array(STEPS).fill(0)}; }
-const banks={}; BANKS.forEach(b=> banks[b]={patt:emptyPatt(),bassNotes:Array(STEPS).fill(null),filled:false});
+const banks={}; BANKS.forEach(b=> banks[b]={patt:emptyPatt(),bassNotes:Array(STEPS).fill(null),perc:Array(STEPS).fill(0),pluckNotes:Array(STEPS).fill(null),genre:null,filled:false});
 const state={ editBank:"A", songMode:false, key:"A", scale:"minor", playing:false, songBar:0 };
 const song=[]; // [{bank,bars}]
 
@@ -691,6 +707,15 @@ const bassDrive=new Tone.Distortion(0.12); bass.disconnect(); bass.chain(bassDri
 const lead=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth"},envelope:{attack:0.01,decay:0.2,sustain:0.4,release:0.6}});
 const leadFX=new Tone.PingPongDelay("8n",0.18), leadRev=new Tone.Reverb(1.4);
 mk("lead",lead,-8); lead.disconnect(); lead.chain(leadFX,leadRev,chan.lead.vol);
+/* perc — Jersey Club "bed squeak" (Some Cut-style): fast up-chirp through a resonant bandpass */
+const squeak=mk("perc",new Tone.Synth({oscillator:{type:"square"},envelope:{attack:0.004,decay:0.09,sustain:0,release:0.03}}),-13);
+const squeakBP=new Tone.Filter({type:"bandpass",frequency:2300,Q:4});
+squeak.disconnect(); squeak.chain(squeakBP,chan.perc.vol);
+function playSqueak(time,vel){ squeak.triggerAttackRelease("G4","16n",time,vel||0.9); squeak.frequency.exponentialRampTo("D6",0.06,time); }
+/* pluck — airy/watery topline (Dakiti-style): soft triangle → LP → ping-pong → long reverb */
+const pluck=mk("pluck",new Tone.Synth({oscillator:{type:"triangle"},envelope:{attack:0.004,decay:0.28,sustain:0.04,release:0.5}}),-11);
+const pluckLP=new Tone.Filter(2800,"lowpass"), pluckDl=new Tone.PingPongDelay("8n.",0.32), pluckRv=new Tone.Reverb(3.5);
+pluck.disconnect(); pluck.chain(pluckLP,pluckDl,pluckRv,chan.pluck.vol);
 
 /* --- notes --- */
 const CHROM=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
@@ -719,6 +744,8 @@ const loop=new Tone.Sequence((time,i)=>{
     hat.triggerAttackRelease(open?"16n":"32n",time+hum(),v);}
   if(p.clap[i]) clap.triggerAttackRelease("16n",time+hum(),0.9);
   if(p.bass[i]&&notes[i]) bass.triggerAttackRelease(notes[i],p.bass[i]===2?"8n":"16n",time);
+  if(lp.perc&&lp.perc[i]) playSqueak(time+hum());
+  if(lp.pluckNotes&&lp.pluckNotes[i]) pluck.triggerAttackRelease(lp.pluckNotes[i],"8n",time,0.5);
   sampleLanes.forEach(L=>{ if(!L.loopMode && L.steps[i]){ try{ L.player.start(time); }catch(e){} } });
   Tone.Draw.schedule(()=>{ paintPlayhead(i); updatePos(i); },time);
 },[...Array(STEPS).keys()],"16n");
@@ -804,7 +831,7 @@ function addMixerChannel(key,lbl,volNode){
   const l=document.createElement("div");l.textContent=lbl;
   ch.appendChild(r);ch.appendChild(l);mixer.appendChild(ch);
 }
-[["kick","KICK"],["snare","SNR"],["hat","HAT"],["clap","CLAP"],["bass","BASS"],["lead","SYNTH"]]
+[["kick","KICK"],["snare","SNR"],["hat","HAT"],["clap","CLAP"],["bass","BASS"],["perc","PERC"],["pluck","PLUCK"],["lead","SYNTH"]]
   .forEach(([k,lbl])=>addMixerChannel(k,lbl,chan[k].vol));
 
 /* ============================ KEYBOARD + MIDI ============================ */
@@ -858,7 +885,8 @@ document.querySelectorAll("[data-bank]").forEach(b=>b.onclick=()=>selectBank(b.d
 function selectBank(name){ state.editBank=name; document.querySelectorAll("[data-bank]").forEach(b=>b.classList.toggle("active",b.dataset.bank===name));
   document.getElementById("editBankLbl").textContent=name; syncCells(); updatePos(0); }
 document.getElementById("copyBank").onclick=()=>{ const from=banks[state.editBank]; const empty=BANKS.find(b=>!banks[b].filled&&b!==state.editBank)||BANKS[(BANKS.indexOf(state.editBank)+1)%4];
-  banks[empty]={patt:JSON.parse(JSON.stringify(from.patt)),bassNotes:[...from.bassNotes],filled:true}; selectBank(empty); };
+  banks[empty]={patt:JSON.parse(JSON.stringify(from.patt)),bassNotes:[...from.bassNotes],perc:[...(from.perc||Array(STEPS).fill(0))],pluckNotes:[...(from.pluckNotes||Array(STEPS).fill(null))],genre:from.genre||null,filled:true};
+  selectBank(empty); updateBankGenreSel(empty); };
 document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ const bars=Math.max(1,+document.getElementById("blockBars").value||4);
   song.push({bank:b.dataset.add,bars}); renderSong(); });
 document.getElementById("clearSong").onclick=()=>{ song.length=0; renderSong(); };
@@ -879,15 +907,132 @@ function updateSongLen(){ const bpm=+document.getElementById("bpm").value||120; 
   document.getElementById("songLen").textContent= song.length? "Song: "+bars+" bars ≈ "+mm+":"+ss+" at "+bpm+" bpm (loops)":""; }
 
 /* ============================ NL GENERATOR ============================ */
+/* Each genre: 16-step kick/snare/hat/clap (2 = accent), bassDensity+octave or
+   explicit bassSteps (scale degrees, null = rest), suggested bpm/swing.
+   Optional: key/scale (applied only when Key Lock is OFF), glide (808 slide
+   portamento), perc (bed-squeak steps), pluckDeg (topline arp, scale degrees). */
 const GENRES={
   boombap:{bpm:92,swing:58,kick:[1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0],snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1],clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],bassDensity:.35,octave:1},
   house:{bpm:124,swing:0,kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],hat:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],bassDensity:.5,octave:2},
   techno:{bpm:132,swing:0,kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],snare:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],hat:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],bassDensity:.7,octave:1},
   trap:{bpm:140,swing:0,kick:[1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0],snare:[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],hat:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],clap:[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],bassDensity:.3,octave:1},
   dnb:{bpm:174,swing:0,kick:[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],bassDensity:.55,octave:1},
-  lofi:{bpm:75,swing:60,kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],bassDensity:.4,octave:2}
+  lofi:{bpm:75,swing:60,kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],bassDensity:.4,octave:2},
+  /* Jersey Club — the signature 5-kick bounce (0,4 quarters · 8,11 dotted-8ths · 14 eighth),
+     off-kilter claps, hat rolls, gliding 808 riding the bounce, bed-squeak perc. */
+  jersey_club:{bpm:140,swing:0,
+    kick:[1,0,0,0,1,0,0,0,1,0,0,1,0,0,1,0],
+    snare:[0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,2],
+    hat:[1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,1],
+    clap:[0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0],
+    perc:[0,0,0,1,0,0,1,0,0,0,0,1,0,0,1,0],
+    bassDensity:.4,octave:1,glide:0.09,
+    bassSteps:[0,null,null,null,0,null,null,null,0,null,null,3,null,null,4,null]},
+  /* Dakiti-style — 110 bpm E minor, spare futuristic reggaeton: 4-floor kick under
+     dembow rims (3,7,11,15), deep gliding sub, airy/watery pluck topline. */
+  dakiti:{bpm:110,swing:0,key:"E",scale:"minor",
+    kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+    snare:[0,0,0,2,0,0,0,2,0,0,0,2,0,0,0,2],
+    hat:[0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    bassDensity:.3,octave:1,glide:0.06,
+    bassSteps:[0,null,null,null,null,null,0,null,0,null,null,null,null,null,5,null],
+    pluckDeg:[null,null,4,null,null,null,2,null,null,null,0,null,null,2,null,null]},
+  drill:{bpm:144,swing:0,
+    kick:[1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0],
+    snare:[0,0,0,0,0,0,0,0,2,0,0,0,0,0,2,0],
+    hat:[1,0,1,1,0,1,0,1,1,0,1,0,1,1,0,1],
+    clap:[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+    bassDensity:.25,octave:1,glide:0.12,
+    bassSteps:[0,null,null,null,null,null,3,null,null,null,null,0,null,null,null,null]},
+  afrobeats:{bpm:104,swing:12,
+    kick:[1,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1],
+    hat:[1,0,1,0,1,1,0,1,1,0,1,0,1,1,0,1],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    bassDensity:.5,octave:2},
+  amapiano:{bpm:112,swing:8,
+    kick:[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0],
+    hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    bassDensity:.5,octave:1,glide:0.04,
+    bassSteps:[0,null,null,0,null,null,3,null,null,0,null,4,null,null,null,3]},
+  uk_garage:{bpm:132,swing:22,
+    kick:[1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    hat:[0,0,1,0,1,0,1,0,0,1,1,0,1,0,1,1],
+    clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    bassDensity:.45,octave:1},
+  phonk:{bpm:134,swing:0,
+    kick:[1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    hat:[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1,1],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    bassDensity:.35,octave:1,glide:0.07},
+  /* French house / disco — Daft-Punk-ish 4-floor with a syncopated funk bassline */
+  french_house:{bpm:122,swing:0,
+    kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    hat:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,0],
+    bassDensity:.8,octave:2,
+    bassSteps:[0,null,null,0,null,null,2,null,0,null,4,null,null,3,null,2]},
+  funk:{bpm:104,swing:14,
+    kick:[1,0,0,0,0,0,1,0,0,0,1,0,0,1,0,0],
+    snare:[0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0],
+    hat:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    bassDensity:.6,octave:1,
+    bassSteps:[0,null,null,0,null,4,null,null,0,null,3,null,2,null,null,4]},
+  hyperpop:{bpm:160,swing:0,
+    kick:[1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,1],
+    snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    hat:[1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1],
+    clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,1],
+    bassDensity:.5,octave:2},
+  ambient:{bpm:80,swing:0,
+    kick:[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],
+    snare:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    hat:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    clap:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    bassDensity:.2,octave:2,
+    bassSteps:[0,null,null,null,null,null,null,null,4,null,null,null,null,null,null,null],
+    pluckDeg:[0,null,null,null,null,null,2,null,null,null,4,null,null,null,2,null]}
 };
+const GENRE_LABEL={boombap:"Boom-bap",house:"Deep House",techno:"Techno",trap:"Trap",dnb:"Drum & Bass",lofi:"Lo-fi",
+  jersey_club:"Jersey Club",dakiti:"Dakiti-style",drill:"Drill",afrobeats:"Afrobeats",amapiano:"Amapiano",
+  uk_garage:"UK Garage",phonk:"Phonk",french_house:"French House",funk:"Funk",hyperpop:"Hyperpop",ambient:"Ambient"};
+const GENRE_PROMPT={
+  boombap:"92 bpm dusty boom-bap, swung hats, sparse kick, sub bass",
+  house:"126 bpm deep house, four on the floor, off-beat hats, warm bass",
+  techno:"132 bpm dark techno, driving kick, off-beat open hats, rolling bass",
+  trap:"140 bpm trap, rolling hi-hats, hard 808 sub",
+  dnb:"174 bpm drum and bass, breakbeat, fast reese bass",
+  lofi:"75 bpm lofi, swung, soft kick, mellow bass",
+  jersey_club:"140 bpm jersey club, five-kick bounce, bed squeak, syncopated claps, hat rolls, gliding 808",
+  dakiti:"110 bpm dakiti-style reggaeton, dembow rim pattern, deep sub, watery synth pluck, spacious",
+  drill:"144 bpm drill, sliding 808, late snares, skippy hats",
+  afrobeats:"104 bpm afrobeats, syncopated kick, rim accents, warm rolling bass",
+  amapiano:"112 bpm amapiano, log drum bass, shaker hats, spacious groove",
+  uk_garage:"132 bpm uk garage, 2-step shuffle, skippy hats, warm sub",
+  phonk:"134 bpm phonk, memphis bounce, gliding 808, cowbell hats",
+  french_house:"122 bpm french house, filtered disco four on the floor, syncopated funk bass, daft punk energy",
+  funk:"104 bpm funk, tight 16th hats, ghost snares, syncopated bassline",
+  hyperpop:"160 bpm hyperpop, pounding kick, bright claps, dense hats, glitch energy",
+  ambient:"80 bpm ambient downtempo, soft sparse kick, airy pluck, spacious"};
 function detectGenre(t){ t=t.toLowerCase();
+  if(/jersey|bed.?squeak/.test(t))return"jersey_club";
+  if(/dakiti|reggaeton|dembow|bad.?bunny|perreo/.test(t))return"dakiti";
+  if(/\bdrill\b/.test(t))return"drill";
+  if(/afro.?beats?|afro.?pop/.test(t))return"afrobeats";
+  if(/amapiano|log.?drum/.test(t))return"amapiano";
+  if(/garage|2.?step|\bukg\b/.test(t))return"uk_garage";
+  if(/phonk|memphis|cowbell/.test(t))return"phonk";
+  if(/french|daft|disco|filter(ed)?.?house|nu.?disco/.test(t))return"french_house";
+  if(/\bfunk\b|funky|neptunes/.test(t))return"funk";
+  if(/hyper.?pop|glitch|pc.?music/.test(t))return"hyperpop";
+  if(/ambient|downtempo|atmospher|drone/.test(t))return"ambient";
   if(/boom.?bap|hip.?hop|dusty/.test(t))return"boombap"; if(/trap|808/.test(t))return"trap";
   if(/dnb|drum.?and.?bass|jungle|breakbeat/.test(t))return"dnb"; if(/techno/.test(t))return"techno";
   if(/lo.?fi|lofi|chill|mellow/.test(t))return"lofi"; if(/house/.test(t))return"house"; return"house"; }
@@ -895,29 +1040,75 @@ function genFromText(txt){
   const g=detectGenre(txt),base=GENRES[g],t=txt.toLowerCase();
   const bpmM=t.match(/(\d{2,3})\s*bpm/)||t.match(/\b(\d{2,3})\b/); const bpm=bpmM?Math.min(220,Math.max(40,+bpmM[1])):base.bpm;
   let swing=base.swing; if(/swung|swing|shuffle/.test(t))swing=Math.max(swing,56); if(/straight|tight/.test(t))swing=0;
-  const scale=/major/.test(t)?"major":(/minor|dark|moody|sad/.test(t)?"minor":state.scale);
+  /* KEY LOCK: when on, every genre lands in the current project key/scale so
+     banks can be chained mid-song and stay in tune. Off → a preset may bring
+     its own key/scale (e.g. Dakiti-style → E minor). */
+  const keyLock=document.getElementById("keyLock").checked;
+  let scale=state.scale, key=null;
+  if(!keyLock){
+    if(/major/.test(t))scale="major"; else if(/minor|dark|moody|sad/.test(t))scale="minor"; else if(base.scale)scale=base.scale;
+    if(base.key)key=base.key;
+  }
   const patt={kick:[...base.kick],snare:[...base.snare],hat:[...base.hat],clap:[...base.clap],bass:Array(STEPS).fill(0)};
   if(/off.?beat|open hat/.test(t)){ for(let i=2;i<STEPS;i+=4)patt.hat[i]=1; }
   if(/sparse|minimal/.test(t)){ patt.hat=patt.hat.map((v,i)=>i%4===0?v:0); }
-  const sc=scaleNotes(state.key,scale,base.octave),bassNotes=Array(STEPS).fill(null);
-  for(let i=0;i<STEPS;i++){ const hit=patt.kick[i]||(Math.random()<base.bassDensity&&i%2===0);
-    if(hit){ patt.bass[i]=1; bassNotes[i]=sc[[0,0,2,4,0,3,0,1][Math.floor(Math.random()*8)]%sc.length]; } }
+  const sc=scaleNotes(key||state.key,scale,base.octave),bassNotes=Array(STEPS).fill(null);
+  if(base.bassSteps){ /* authored bassline (scale degrees) — always rendered in the active key */
+    base.bassSteps.forEach((d,i)=>{ if(d!=null){ patt.bass[i]=1; bassNotes[i]=sc[d%sc.length]; } });
+  }else{
+    for(let i=0;i<STEPS;i++){ const hit=patt.kick[i]||(Math.random()<base.bassDensity&&i%2===0);
+      if(hit){ patt.bass[i]=1; bassNotes[i]=sc[[0,0,2,4,0,3,0,1][Math.floor(Math.random()*8)]%sc.length]; } }
+  }
   for(let i=0;i<STEPS;i++){ if(patt.kick[i]&&i%4===0)patt.kick[i]=2; if(patt.snare[i]&&(i===4||i===12))patt.snare[i]=2;
     if(patt.hat[i]){ if(i%4===2)patt.hat[i]=3; else if(i%2===0)patt.hat[i]=2; } }
-  if(!/techno|house/.test(g)){ [3,7,11,15].forEach(i=>{ if(!patt.snare[i]&&Math.random()<0.35)patt.snare[i]=1; }); }
+  if(!/techno|house|ambient|dakiti|amapiano|jersey/.test(g)){ [3,7,11,15].forEach(i=>{ if(!patt.snare[i]&&Math.random()<0.35)patt.snare[i]=1; }); }
   if(/roll|rolling|trap/.test(t)){ for(let i=0;i<STEPS;i++){ if(!patt.hat[i]&&Math.random()<0.4)patt.hat[i]=1; } }
   for(let i=0;i<STEPS;i++){ if(patt.bass[i]&&patt.kick[i])patt.bass[i]=2; }
-  return {genre:g,bpm,swing,scale,patt,bassNotes};
+  let pluckNotes=null;
+  if(base.pluckDeg){ const psc=scaleNotes(key||state.key,scale,4); pluckNotes=base.pluckDeg.map(d=>d==null?null:psc[d%psc.length]); }
+  return {genre:g,bpm,swing,scale,key,patt,bassNotes,perc:base.perc?[...base.perc]:null,pluckNotes,glide:base.glide};
 }
-function applyGen(r){
-  banks[state.editBank]={patt:r.patt,bassNotes:r.bassNotes,filled:true}; state.scale=r.scale;
-  document.getElementById("bpm").value=r.bpm; Tone.Transport.bpm.rampTo(r.bpm,0.1);
-  document.getElementById("swing").value=Math.round(r.swing); Tone.Transport.swing=r.swing/100;
-  document.getElementById("scale").value=r.scale; syncCells(); updateSongLen();
-  document.getElementById("genReadout").innerHTML=`→ bank <b>${state.editBank}</b>: <b>${r.genre}</b> · ${r.bpm} bpm · swing ${Math.round(r.swing)}% · ${state.key} ${r.scale} · loaded. <span style="color:var(--acc2)">▶ Play</span>`;
+function applyGen(r,bank){
+  bank=bank||state.editBank;
+  banks[bank]={patt:r.patt,bassNotes:r.bassNotes,perc:r.perc||Array(STEPS).fill(0),pluckNotes:r.pluckNotes||Array(STEPS).fill(null),genre:r.genre,filled:true};
+  state.scale=r.scale; document.getElementById("scale").value=r.scale;
+  if(r.key){ state.key=r.key; document.getElementById("key").value=r.key; }
+  bass.portamento=r.glide!=null?r.glide:0.04;   // 808 slide amount per genre
+  if(!state.songMode){ /* one project tempo: in Song mode keep the transport BPM/swing */
+    document.getElementById("bpm").value=r.bpm; Tone.Transport.bpm.rampTo(r.bpm,0.1);
+    document.getElementById("swing").value=Math.round(r.swing); Tone.Transport.swing=r.swing/100;
+  }
+  if(bank!==state.editBank) selectBank(bank); else syncCells();
+  updateBankGenreSel(bank); updateSongLen();
+  const lbl=GENRE_LABEL[r.genre]||r.genre;
+  const lock=document.getElementById("keyLock").checked?" 🔒":"";
+  const tempoNote=state.songMode?`song keeps ${Math.round(Tone.Transport.bpm.value)} bpm (suggests ${r.bpm})`:`${r.bpm} bpm · swing ${Math.round(r.swing)}%`;
+  document.getElementById("genReadout").innerHTML=`→ bank <b>${bank}</b>: <b>${lbl}</b> · ${tempoNote} · ${state.key} ${r.scale}${lock} · loaded. <span style="color:var(--acc2)">▶ Play</span>`;
 }
 document.getElementById("genBtn").onclick=async()=>{ await ensureAudio(); applyGen(genFromText(document.getElementById("prompt").value)); };
 document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ document.getElementById("prompt").value=c.dataset.p; document.getElementById("genBtn").click(); });
+
+/* --- genre library dropdown → generates into the selected bank --- */
+const genreSelect=document.getElementById("genreSelect");
+Object.keys(GENRES).forEach(g=>genreSelect.appendChild(new Option(GENRE_LABEL[g],g)));
+genreSelect.onchange=async()=>{ if(!genreSelect.value)return;
+  document.getElementById("prompt").value=GENRE_PROMPT[genreSelect.value];
+  await ensureAudio(); applyGen(genFromText(document.getElementById("prompt").value)); };
+
+/* --- per-bank genre pickers: A=jersey, B=dakiti, C=drill… for song-mode switching --- */
+const bankGenreSel={};
+{ const wrap=document.getElementById("bankGenres");
+  BANKS.forEach(b=>{
+    const c=document.createElement("div"); c.className="ctl";
+    const l=document.createElement("label"); l.textContent="Bank "+b; c.appendChild(l);
+    const s=document.createElement("select"); s.dataset.ref="bank-genre-"+b; s.style.width="122px";
+    s.appendChild(new Option("—",""));
+    Object.keys(GENRES).forEach(g=>s.appendChild(new Option(GENRE_LABEL[g],g)));
+    s.onchange=async()=>{ if(!s.value)return; await ensureAudio(); applyGen(genFromText(GENRE_PROMPT[s.value]),b); };
+    c.appendChild(s); wrap.appendChild(c); bankGenreSel[b]=s;
+  });
+}
+function updateBankGenreSel(b){ if(bankGenreSel[b]) bankGenreSel[b].value=GENRES[banks[b].genre]?banks[b].genre:""; }
 
 /* ============================ IMPORT AUDIO ============================ */
 const drop=document.getElementById("drop"),fileInput=document.getElementById("fileInput");
