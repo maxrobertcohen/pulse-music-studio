@@ -169,22 +169,30 @@ const state = {
   key:"A", scale:"minor", playing:false, step:0
 };
 
-/* --- instruments --- */
+/* --- master bus: glue compressor -> limiter --- */
 const master = new Tone.Limiter(-1).toDestination();
-const masterVol = new Tone.Volume(-6).connect(master);
+const glue   = new Tone.Compressor({threshold:-16,ratio:3,attack:0.005,release:0.12}).connect(master);
+const masterVol = new Tone.Volume(-5).connect(glue);
 const chan = {};
 function mk(name, node, vol){ const v=new Tone.Volume(vol||0).connect(masterVol); node.connect(v); chan[name]={node,vol:v}; return node; }
 
-const kick  = mk("kick", new Tone.MembraneSynth({pitchDecay:0.03,octaves:6,envelope:{attack:0.001,decay:0.32,sustain:0}}), -2);
-const snare = mk("snare",new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:0.001,decay:0.18,sustain:0}}), -8);
-const snBody= new Tone.MembraneSynth({pitchDecay:0.02,octaves:4,envelope:{attack:0.001,decay:0.14,sustain:0}}).connect(chan.snare.vol);
-const hat   = mk("hat",  new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:0.001,decay:0.04,sustain:0}}), -14);
-const hatHP = new Tone.Filter(7000,"highpass"); hat.disconnect(); hat.chain(hatHP, chan.hat.vol);
-const clap  = mk("clap", new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:0.002,decay:0.16,sustain:0}}), -10);
-const clapHP= new Tone.Filter(1200,"highpass"); clap.disconnect(); clap.chain(clapHP, chan.clap.vol);
-const bass  = mk("bass", new Tone.MonoSynth({oscillator:{type:"sawtooth"},filter:{Q:2,type:"lowpass"},
-                filterEnvelope:{attack:0.01,decay:0.2,sustain:0.3,baseFrequency:120,octaves:2.5},
-                envelope:{attack:0.01,decay:0.2,sustain:0.6,release:0.2}}), -3);
+// punchy driven kick
+const kick  = mk("kick", new Tone.MembraneSynth({pitchDecay:0.05,octaves:8,oscillator:{type:"sine"},envelope:{attack:0.001,decay:0.42,sustain:0,release:0.02}}), -1);
+const kickDrive=new Tone.Distortion(0.35); kick.disconnect(); kick.chain(kickDrive, chan.kick.vol);
+// snare: noise crack thru bandpass + tonal body
+const snare = mk("snare",new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:0.001,decay:0.16,sustain:0}}), -7);
+const snBP  = new Tone.Filter({type:"bandpass",frequency:1800,Q:0.7}); snare.disconnect(); snare.chain(snBP, chan.snare.vol);
+const snBody= new Tone.MembraneSynth({pitchDecay:0.02,octaves:3,envelope:{attack:0.001,decay:0.13,sustain:0}}).connect(chan.snare.vol);
+// metallic hats (real hat timbre)
+const hat   = mk("hat",  new Tone.MetalSynth({frequency:280,envelope:{attack:0.001,decay:0.06,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:5000,octaves:1.4}), -18);
+// clap
+const clap  = mk("clap", new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:0.002,decay:0.14,sustain:0}}), -9);
+const clapHP= new Tone.Filter(1100,"highpass"); clap.disconnect(); clap.chain(clapHP, chan.clap.vol);
+// 808 sub bass: sine + glide + grit
+const bass  = mk("bass", new Tone.MonoSynth({oscillator:{type:"sine"},portamento:0.04,
+                filter:{Q:1,type:"lowpass"},filterEnvelope:{attack:0.005,decay:0.3,sustain:0.6,baseFrequency:80,octaves:2.2},
+                envelope:{attack:0.006,decay:0.3,sustain:0.9,release:0.25}}), -2);
+const bassDrive=new Tone.Distortion(0.12); bass.disconnect(); bass.chain(bassDrive, chan.bass.vol);
 // lead synth (keyboard/MIDI)
 const lead = new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth"},envelope:{attack:0.01,decay:0.2,sustain:0.4,release:0.6}});
 const leadFX = new Tone.PingPongDelay("8n",0.18); const leadRev = new Tone.Reverb(1.4);
@@ -198,12 +206,15 @@ function scaleNotes(key,scale,oct){ const r=CHROM.indexOf(key); return SCALES[sc
 /* --- sequence clock --- */
 const loop = new Tone.Sequence((time,i)=>{
   state.step=i;
-  const p=state.patt;
-  if(p.kick[i])  kick.triggerAttackRelease("C1","8n",time);
-  if(p.snare[i]){ snare.triggerAttackRelease("16n",time); snBody.triggerAttackRelease("G2","16n",time);}
-  if(p.hat[i])   hat.triggerAttackRelease("32n",time, i%2? 0.6:1);
-  if(p.clap[i])  clap.triggerAttackRelease("16n",time);
-  if(p.bass[i] && state.bassNotes[i]) bass.triggerAttackRelease(state.bassNotes[i], "16n", time);
+  const p=state.patt, strong=(i%4===0);
+  const hum=()=>Math.random()*0.006;                 // micro-timing humanise
+  if(p.kick[i]) kick.triggerAttackRelease("C1","8n",time, p.kick[i]===2?1:0.9);
+  if(p.snare[i]){ const v=p.snare[i]===2?1:(p.snare[i]===1&&!(i===4||i===12)?0.35:0.85); // ghost snares quiet
+    snare.triggerAttackRelease("16n",time+hum(),v); snBody.triggerAttackRelease("G2","16n",time,v*0.8);}
+  if(p.hat[i]){ const open=p.hat[i]===3; const v=p.hat[i]===2?1:(strong?0.85:0.5);
+    hat.triggerAttackRelease(open?"16n":"32n",time+hum(),v);}
+  if(p.clap[i]) clap.triggerAttackRelease("16n",time+hum(),0.9);
+  if(p.bass[i] && state.bassNotes[i]) bass.triggerAttackRelease(state.bassNotes[i], p.bass[i]===2?"8n":"16n", time);
   Tone.Draw.schedule(()=>paintPlayhead(i), time);
 }, [...Array(STEPS).keys()], "16n");
 
@@ -220,7 +231,7 @@ INSTS.forEach(inst=>{
   for(let s=0;s<STEPS;s++){
     const c=document.createElement("div");c.className="cell"+(s%4===0?" beat":"");
     c.dataset.inst=inst;c.dataset.s=s;
-    c.onclick=()=>{ state.patt[inst][s]^=1; if(inst==="bass"&&state.patt.bass[s]&&!state.bassNotes[s]) state.bassNotes[s]=defaultBassNote(); syncCells(); };
+    c.onclick=()=>{ state.patt[inst][s]=state.patt[inst][s]?0:1; if(inst==="bass"&&state.patt.bass[s]&&!state.bassNotes[s]) state.bassNotes[s]=defaultBassNote(); syncCells(); };
     steps.appendChild(c);cellEls[inst].push(c);
   }
   lane.appendChild(name);lane.appendChild(steps);grid.appendChild(lane);
@@ -347,6 +358,17 @@ function genFromText(txt){
     const hit = patt.kick[i] || (Math.random()<base.bassDensity && i%2===0);
     if(hit){ patt.bass[i]=1; bassNotes[i]= sc[[0,0,2,4,0,3,0,1][Math.floor(Math.random()*8)]% sc.length]; }
   }
+  /* ---- HOT groove pass: accents, open hats, ghosts, fills ---- */
+  for(let i=0;i<STEPS;i++){
+    if(patt.kick[i]&&i%4===0) patt.kick[i]=2;                 // accent downbeat kicks
+    if(patt.snare[i]&&(i===4||i===12)) patt.snare[i]=2;       // crack the backbeat
+    if(patt.hat[i]){ if(i%4===2) patt.hat[i]=3;               // open hat on off-beats
+                     else if(i%2===0) patt.hat[i]=2; }        // accent on-beats
+  }
+  if(!/techno|house/.test(g)){ [3,7,11,15].forEach(i=>{ if(!patt.snare[i]&&Math.random()<0.35) patt.snare[i]=1; }); } // ghost snares
+  if(/roll|rolling|trap/.test(t)){ for(let i=0;i<STEPS;i++){ if(!patt.hat[i]&&Math.random()<0.4) patt.hat[i]=1; } }     // hat rolls
+  [14,15].forEach(i=>{ if(Math.random()<0.25){ patt.snare[i]=1; } });                                                   // occasional end fill
+  for(let i=0;i<STEPS;i++){ if(patt.bass[i]&&patt.kick[i]) patt.bass[i]=2; }                                            // longer bass on kick
   return {genre:g,bpm,swing,scale,patt,bassNotes};
 }
 function applyGen(r){
