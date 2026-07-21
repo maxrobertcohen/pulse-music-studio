@@ -563,6 +563,30 @@
     border-radius:var(--r-xs);padding:4px 6px;font:600 10px var(--font-mono);box-shadow:var(--inset-ctl);
   }
 
+  /* ---------------- sessions ---------------- */
+  .sessions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+  .sesrow{
+    display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+    padding:9px 12px;border-radius:var(--r-s);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface-0));
+    border:1px solid var(--line-soft);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 2px 6px rgba(0,0,0,.3);
+    transition:border-color .15s, box-shadow .2s;
+  }
+  .sesrow.cur{
+    border-color:rgba(123,104,255,.5);
+    box-shadow:0 0 16px -7px rgba(123,104,255,.6), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .sesname{flex:1;min-width:120px;font:600 13px var(--font-ui);color:var(--txt);
+    display:flex;align-items:center;gap:8px;overflow:hidden}
+  .sestag{
+    font:600 8px var(--font-mono);letter-spacing:.14em;text-transform:uppercase;flex:none;
+    color:var(--acc-hi);border:1px solid rgba(123,104,255,.4);border-radius:99px;padding:2px 7px;
+    background:rgba(123,104,255,.12);
+  }
+  .sesdate{font:500 10px var(--font-mono);color:var(--faint);letter-spacing:.04em;flex:none}
+  .sesrow .small.danger:hover{color:var(--hot-hi);border-color:var(--hot)}
+
   /* ---------------- misc ---------------- */
   .hint{font:400 11.5px/1.6 var(--font-ui);color:var(--dim);margin-top:10px}
   .hint b{color:var(--txt-2)}
@@ -749,6 +773,20 @@
       <h2><span class="idx">09</span> Mixer <span class="sub">channel levels · VOICE = your mic</span></h2>
       <div class="mixrow" id="mixer"></div>
     </div>
+  </div>
+
+  <!-- SESSIONS -->
+  <div class="panel" data-ref="sessions-panel">
+    <h2><span class="idx">10</span> Sessions <span class="sub">save · restore · move between devices</span></h2>
+    <div class="transport" data-ref="session-controls">
+      <button class="primary" id="saveSession" data-ref="save-session" title="Snapshot the whole project — beat, settings, banks & audio tracks — as a named session">💾 Save session</button>
+      <button id="newSession" data-ref="new-session" title="Start a fresh blank working project (your saved sessions are kept)">✚ New blank</button>
+      <button id="importSession" data-ref="import-session" title="Import a .pulse.json session file exported from any device">⬆ Import file</button>
+      <input type="file" id="sessFile" accept=".json,application/json" style="display:none"/>
+      <span class="pill" id="sessStatus" data-ref="session-status" style="display:none"></span>
+    </div>
+    <div class="sessions" id="sessionList" data-ref="session-list"></div>
+    <div class="hint"><b>Save session</b> snapshots everything — composition, banks, mixer/FX and audio tracks — under a name. <b>Load</b> restores it as the working project · <b>Export</b> downloads a self-contained <b>.pulse.json</b> (audio included) you can <b>Import</b> on another device. Saving with an existing name updates that session.</div>
   </div>
 
   <div class="foot" data-ref="footer">
@@ -1603,7 +1641,7 @@ exportBtn.onclick=async()=>{
     expStat.textContent="saved ✓ pulse-track.wav";
   }
 };
-function bufferToWav(buffer){
+function wavBytes(buffer){ /* 16-bit PCM WAV bytes for any AudioBuffer-shaped source */
   const numCh=buffer.numberOfChannels,len=buffer.length,sr=buffer.sampleRate,bps=2,blockAlign=numCh*bps,dataLen=len*blockAlign;
   const ab=new ArrayBuffer(44+dataLen),dv=new DataView(ab); let o=0;
   const ws=s=>{for(let i=0;i<s.length;i++)dv.setUint8(o++,s.charCodeAt(i));};
@@ -1611,8 +1649,9 @@ function bufferToWav(buffer){
   ws("RIFF");w32(36+dataLen);ws("WAVE");ws("fmt ");w32(16);w16(1);w16(numCh);w32(sr);w32(sr*blockAlign);w16(blockAlign);w16(16);ws("data");w32(dataLen);
   const chans=[];for(let c=0;c<numCh;c++)chans.push(buffer.getChannelData(c));
   for(let i=0;i<len;i++)for(let c=0;c<numCh;c++){let s=Math.max(-1,Math.min(1,chans[c][i]));dv.setInt16(o,s<0?s*0x8000:s*0x7FFF,true);o+=2;}
-  return new Blob([ab],{type:"audio/wav"});
+  return ab;
 }
+function bufferToWav(buffer){ return new Blob([wavBytes(buffer)],{type:"audio/wav"}); }
 
 /* ============================ PERSISTENCE ============================ */
 /* Composition + settings → localStorage (schema {v:1}) · audio clips (imports,
@@ -1638,18 +1677,25 @@ function idbOpen(){
     rq.onblocked=()=>rej(new Error("IndexedDB blocked"));
   });
 }
+async function idbPutRecord(rec){ /* raw write into the working-clip store (throws on failure) */
+  const db=await idbOpen();
+  try{
+    await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,"readwrite");
+      tx.objectStore(IDB_STORE).put(rec);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error||new Error("write failed"));
+      tx.onabort=()=>rej(tx.error||new Error("write aborted")); });
+  }finally{ try{db.close();}catch(e){} }
+}
+function laneClipData(L){ /* Float32 channel snapshot of a lane's buffer (null if empty) */
+  const buf=L&&L.player&&L.player.buffer&&L.player.buffer.get&&L.player.buffer.get();
+  if(!buf||!buf.length)return null;
+  const channels=[]; for(let c=0;c<buf.numberOfChannels;c++) channels.push(new Float32Array(buf.getChannelData(c)));
+  return {sampleRate:buf.sampleRate,channels};
+}
 async function idbPutClip(L){
   try{
-    const buf=L.player&&L.player.buffer&&L.player.buffer.get&&L.player.buffer.get();
-    if(!buf||!buf.length)return;
-    const channels=[]; for(let c=0;c<buf.numberOfChannels;c++) channels.push(new Float32Array(buf.getChannelData(c)));
-    const db=await idbOpen();
-    try{
-      await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,"readwrite");
-        tx.objectStore(IDB_STORE).put({uid:L.uid,sampleRate:buf.sampleRate,channels});
-        tx.oncomplete=res; tx.onerror=()=>rej(tx.error||new Error("write failed"));
-        tx.onabort=()=>rej(tx.error||new Error("write aborted")); });
-    }finally{ try{db.close();}catch(e){} }
+    const clip=laneClipData(L); if(!clip)return;
+    await idbPutRecord({uid:L.uid,sampleRate:clip.sampleRate,channels:clip.channels});
   }catch(e){ console.warn("PULSE: audio clip not persisted — "+(e&&e.message)); }
 }
 async function idbGetClip(uid){
@@ -1854,6 +1900,327 @@ document.getElementById("resetProject").onclick=async()=>{
   location.reload();
 };
 
+/* ============================ SESSIONS ============================ */
+/* Named multi-session save/restore, additive on top of the single working
+   autosave. Layout:
+     localStorage  pulse.sessions.v1        → index {v:1,list:[{id,name,created,updated}]}
+     localStorage  pulse.session.<id>       → snapshot {v:1,name,savedAt,project:<serializeProject()>}
+     IndexedDB     pulse-session-audio/clips → {k:"<id>/<trackUid>",sampleRate,channels:[Float32Array]}
+   Session audio lives in its own DB so “Reset project” (which wipes pulse-audio)
+   never touches saved sessions. Loading a session copies its clips into the
+   working store under fresh uids, then reuses applyProject()/restoreTracks() —
+   the loaded session becomes the working autosaved project. Export/import is a
+   self-contained .pulse.json (composition + base64 16-bit WAV per track). */
+const SESS_INDEX_KEY="pulse.sessions.v1", SESS_KEY_PREFIX="pulse.session.";
+const SESS_DB="pulse-session-audio", SESS_STORE="clips";
+const SESS_FILE_FORMAT="pulse-session";
+let activeSessionId=null;
+
+/* ---- session-audio DB (parallel to the working-clip helpers; all failures soft) ---- */
+function sesDbOpen(){
+  return new Promise((res,rej)=>{
+    if(!window.indexedDB) return rej(new Error("IndexedDB unavailable"));
+    let rq; try{ rq=indexedDB.open(SESS_DB,1); }catch(e){ return rej(e); }
+    rq.onupgradeneeded=()=>{ const db=rq.result;
+      if(!db.objectStoreNames.contains(SESS_STORE)) db.createObjectStore(SESS_STORE,{keyPath:"k"}); };
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error||new Error("IndexedDB open failed"));
+    rq.onblocked=()=>rej(new Error("IndexedDB blocked"));
+  });
+}
+async function sesPutClip(sid,uid,clip){
+  const db=await sesDbOpen();
+  try{
+    await new Promise((res,rej)=>{ const tx=db.transaction(SESS_STORE,"readwrite");
+      tx.objectStore(SESS_STORE).put({k:sid+"/"+uid,sampleRate:clip.sampleRate,channels:clip.channels});
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error||new Error("write failed"));
+      tx.onabort=()=>rej(tx.error||new Error("write aborted")); });
+  }finally{ try{db.close();}catch(e){} }
+}
+async function sesGetClip(sid,uid){
+  const db=await sesDbOpen();
+  try{
+    return await new Promise((res,rej)=>{ const tx=db.transaction(SESS_STORE,"readonly");
+      const rq=tx.objectStore(SESS_STORE).get(sid+"/"+uid);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error||new Error("read failed")); });
+  }finally{ try{db.close();}catch(e){} }
+}
+async function sesDeleteClips(sid){
+  try{
+    const db=await sesDbOpen();
+    try{
+      await new Promise((res,rej)=>{ const tx=db.transaction(SESS_STORE,"readwrite");
+        const st=tx.objectStore(SESS_STORE);
+        if(st.getAllKeys){ const rq=st.getAllKeys();
+          rq.onsuccess=()=>{ (rq.result||[]).forEach(k=>{ if(typeof k==="string"&&k.indexOf(sid+"/")===0)st.delete(k); }); }; }
+        tx.oncomplete=res; tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error); });
+    }finally{ try{db.close();}catch(e){} }
+  }catch(e){}
+}
+
+/* ---- index + record helpers (corrupt data is discarded, never crashes) ---- */
+function sessIndex(){
+  try{
+    const d=JSON.parse(localStorage.getItem(SESS_INDEX_KEY)||"null");
+    if(d&&d.v===1&&Array.isArray(d.list))
+      return d.list.filter(e=>e&&typeof e.id==="string"&&typeof e.name==="string");
+  }catch(e){}
+  return [];
+}
+function writeSessIndex(list){
+  try{ localStorage.setItem(SESS_INDEX_KEY,JSON.stringify({v:1,list})); return true; }
+  catch(e){ return false; }
+}
+function readSessRecord(id){
+  let raw=null; try{ raw=localStorage.getItem(SESS_KEY_PREFIX+id); }catch(e){ return null; }
+  if(!raw)return null;
+  let d=null; try{ d=JSON.parse(raw); }catch(e){ return null; }
+  if(!d||d.v!==1||!d.project||d.project.v!==1)return null;
+  return d;
+}
+function genSessId(){ return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function askConfirm(msg){ try{ return typeof confirm==="function"?confirm(msg):true; }catch(e){ return true; } }
+function askPrompt(msg,def){ try{ return typeof prompt==="function"?prompt(msg,def):def; }catch(e){ return def; } }
+function escHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function defaultSessName(){ const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return "Session "+(d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes()); }
+function fmtSessDate(t){
+  const d=new Date(isFinite(+t)?+t:Date.now());
+  try{ return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" "
+             +d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }
+  catch(e){ return d.toISOString().slice(0,16).replace("T"," "); }
+}
+function sessMsg(txt,err){
+  const el=document.getElementById("sessStatus"); if(!el)return;
+  el.style.display=""; el.textContent=txt; el.style.color=err?"var(--hot)":"var(--acc2)";
+  clearTimeout(sessMsg._t); sessMsg._t=setTimeout(()=>{ el.style.display="none"; },err?5200:2800);
+}
+
+/* ---- capture restoreTracks' promise so session-load can await audio restore ---- */
+let lastTrackRestore=Promise.resolve();
+const coreRestoreTracks=restoreTracks;
+restoreTracks=function(list){ lastTrackRestore=coreRestoreTracks(list)||Promise.resolve(); return lastTrackRestore; };
+
+/* ---- save (named snapshot; same name = update that session) ---- */
+async function saveSessionFlow(){
+  const idx=sessIndex();
+  const active=idx.find(s=>s.id===activeSessionId);
+  const nameIn=askPrompt("Session name:",active?active.name:defaultSessName());
+  if(nameIn===null)return;                                  // cancelled
+  const name=String(nameIn).trim().slice(0,80)||defaultSessName();
+  const entry=idx.find(s=>s.name===name);
+  if(entry&&entry.id!==activeSessionId&&!askConfirm('A session named “'+name+'” already exists — overwrite it?'))return;
+  const id=entry?entry.id:genSessId();
+  sessMsg("saving…");
+  const proj=serializeProject();
+  if(entry)await sesDeleteClips(id);                        // replace old snapshot's audio
+  let skipped=0;
+  const byUid={}; sampleLanes.forEach(L=>{ if(L.uid)byUid[L.uid]=L; });
+  for(const t of (proj.tracks||[])){
+    const L=t&&t.uid?byUid[t.uid]:null; if(!L){ if(t)t.uid=null; continue; }
+    try{
+      const clip=laneClipData(L);
+      if(!clip){ t.uid=null; continue; }
+      await sesPutClip(id,t.uid,clip);
+    }catch(e){ skipped++; t.uid=null; }
+  }
+  const now=Date.now();
+  try{ localStorage.setItem(SESS_KEY_PREFIX+id,JSON.stringify({v:1,name,savedAt:now,project:proj})); }
+  catch(e){ sessMsg("⚠ couldn't save — browser storage is full",true); sesDeleteClips(id); return; }
+  if(entry){ entry.name=name; entry.updated=now; }
+  else idx.push({id,name,created:now,updated:now});
+  if(!writeSessIndex(idx)){
+    try{ localStorage.removeItem(SESS_KEY_PREFIX+id); }catch(e){}
+    sesDeleteClips(id); sessMsg("⚠ couldn't save — browser storage is full",true); return;
+  }
+  activeSessionId=id; renderSessions();
+  sessMsg('✓ saved “'+name+'”'+(skipped?" · "+skipped+" audio clip"+(skipped>1?"s":"")+" skipped":""));
+}
+
+/* ---- load (full restore → becomes the working autosaved project) ---- */
+async function loadSession(id){
+  const rec=readSessRecord(id);
+  if(!rec){
+    sessMsg("⚠ that session's data is corrupt — removed from the list",true);
+    try{ localStorage.removeItem(SESS_KEY_PREFIX+id); }catch(e){}
+    writeSessIndex(sessIndex().filter(s=>s.id!==id));
+    if(activeSessionId===id)activeSessionId=null;
+    renderSessions(); return;
+  }
+  sessMsg("loading…");
+  try{ stop(); }catch(e){}
+  [...sampleLanes].forEach(L=>{ try{ removeSampleLane(L,L.laneEl); }catch(e){} });
+  let proj; try{ proj=JSON.parse(JSON.stringify(rec.project)); }catch(e){ sessMsg("⚠ couldn't load that session",true); return; }
+  const tracks=Array.isArray(proj.tracks)?proj.tracks:[];
+  for(const t of tracks){                                   // session clips → working store, fresh uids
+    if(!t||!t.uid)continue;
+    try{
+      const clip=await sesGetClip(id,t.uid);
+      if(!clip||!clip.channels||!clip.channels.length){ t.uid=null; continue; }
+      const nu=genUid();
+      await idbPutRecord({uid:nu,sampleRate:clip.sampleRate,channels:clip.channels});
+      t.uid=nu;
+    }catch(e){ t.uid=null; }
+  }
+  restoring=true;
+  try{ applyProject(proj); await lastTrackRestore; }
+  catch(e){ restoring=false; console.warn("PULSE: session failed to load",e); sessMsg("⚠ couldn't load that session",true); return; }
+  restoring=false;
+  activeSessionId=id; renderSessions(); saveNow();
+  document.getElementById("genReadout").innerHTML='↺ session “'+escHtml(rec.name)+'” loaded · <span style="color:var(--acc2)">▶ Play</span>';
+  sessMsg('✓ loaded “'+rec.name+'”');
+}
+
+/* ---- rename / delete ---- */
+function renameSession(id){
+  const idx=sessIndex(),e=idx.find(s=>s.id===id); if(!e)return;
+  const nn=askPrompt("Rename session:",e.name); if(nn===null)return;
+  const name=String(nn).trim().slice(0,80); if(!name||name===e.name)return;
+  if(idx.some(s=>s.id!==id&&s.name===name)&&!askConfirm('A session named “'+name+'” already exists — use the name anyway?'))return;
+  e.name=name;
+  try{ const rec=readSessRecord(id); if(rec){ rec.name=name; localStorage.setItem(SESS_KEY_PREFIX+id,JSON.stringify(rec)); } }catch(e2){}
+  writeSessIndex(idx); renderSessions(); sessMsg("✓ renamed");
+}
+function deleteSession(id){
+  const idx=sessIndex(),e=idx.find(s=>s.id===id);
+  if(!askConfirm('Delete session “'+(e?e.name:id)+'”? Its snapshot and audio are removed (the current working project is untouched).'))return;
+  try{ localStorage.removeItem(SESS_KEY_PREFIX+id); }catch(e2){}
+  writeSessIndex(idx.filter(s=>s.id!==id));
+  sesDeleteClips(id);
+  if(activeSessionId===id)activeSessionId=null;
+  renderSessions(); sessMsg("deleted");
+}
+
+/* ---- new blank session (working project resets; saved sessions untouched) ---- */
+function newBlankSession(){
+  if(!askConfirm("Start a new blank session? Unsaved changes to the working project are lost — saved sessions are kept."))return;
+  try{ stop(); }catch(e){}
+  [...sampleLanes].forEach(L=>{ try{ removeSampleLane(L,L.laneEl); }catch(e){} });
+  restoring=true;
+  try{ applyProject({v:1,key:"A",scale:"minor",bpm:120,swing:0}); }catch(e){ console.warn("PULSE: blank reset issue",e); }
+  restoring=false;
+  activeSessionId=null; renderSessions(); saveNow();
+  document.getElementById("genReadout").innerHTML='✚ blank session — describe a beat and <span style="color:var(--acc2)">✨ Generate</span>';
+  sessMsg("✓ new blank session");
+}
+
+/* ---- export / import (.pulse.json — self-contained, audio as base64 16-bit WAV) ---- */
+function bytesToB64(u8){ let s=""; for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); }
+function b64ToBytes(b){ const s=atob(b),u=new Uint8Array(s.length); for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i); return u; }
+function clipToWavB64(clip){
+  const shim={numberOfChannels:clip.channels.length,length:clip.channels[0].length,
+              sampleRate:clip.sampleRate,getChannelData:c=>clip.channels[c]};
+  return bytesToB64(new Uint8Array(wavBytes(shim)));
+}
+function wavToClip(u8){ /* strict parse of our own 16-bit PCM WAV — throws on anything foreign */
+  if(!(u8 instanceof Uint8Array)||u8.length<44)throw new Error("not a WAV");
+  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  const tag=o=>String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
+  if(tag(0)!=="RIFF"||tag(8)!=="WAVE")throw new Error("not a WAV");
+  let o=12,fmt=null,data=null;
+  while(o+8<=u8.length){
+    const id=tag(o),sz=dv.getUint32(o+4,true);
+    if(id==="fmt ")fmt=o+8;
+    else if(id==="data")data={o:o+8,sz:Math.min(sz,u8.length-o-8)};
+    o+=8+sz+(sz&1);
+  }
+  if(fmt===null||!data)throw new Error("bad WAV");
+  const audioFormat=dv.getUint16(fmt,true),numCh=dv.getUint16(fmt+2,true),
+        sr=dv.getUint32(fmt+4,true),bits=dv.getUint16(fmt+14,true);
+  if(audioFormat!==1||bits!==16||numCh<1||numCh>8||sr<8000||sr>192000)throw new Error("unsupported WAV");
+  const frames=Math.floor(data.sz/(numCh*2));
+  if(frames<1)throw new Error("empty WAV");
+  const channels=[]; for(let c=0;c<numCh;c++)channels.push(new Float32Array(frames));
+  for(let i=0;i<frames;i++)for(let c=0;c<numCh;c++){
+    const v=dv.getInt16(data.o+(i*numCh+c)*2,true); channels[c][i]=v<0?v/0x8000:v/0x7FFF; }
+  return {sampleRate:sr,channels};
+}
+async function exportSession(id){
+  const rec=readSessRecord(id);
+  if(!rec){ sessMsg("⚠ that session's data is corrupt — can't export",true); return; }
+  sessMsg("exporting…");
+  const audio=[];
+  const tracks=Array.isArray(rec.project.tracks)?rec.project.tracks:[];
+  for(const t of tracks){
+    if(!t||!t.uid)continue;
+    try{
+      const clip=await sesGetClip(id,t.uid);
+      if(clip&&clip.channels&&clip.channels.length&&clip.channels[0].length)
+        audio.push({uid:t.uid,wav:clipToWavB64(clip)});
+    }catch(e){}
+  }
+  const file={format:SESS_FILE_FORMAT,v:1,name:rec.name,savedAt:rec.savedAt,project:rec.project,audio};
+  const fn=(String(rec.name).replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"-")||"pulse-session")+".pulse.json";
+  const blob=new Blob([JSON.stringify(file)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=fn; a.click(); URL.revokeObjectURL(url);
+  sessMsg('✓ exported “'+rec.name+'”');
+}
+async function importSessionFile(file){
+  sessMsg("importing…");
+  let d=null;
+  try{
+    const txt=file.text?await file.text():await new Promise((res,rej)=>{
+      const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error||new Error("read failed")); r.readAsText(file); });
+    d=JSON.parse(txt);
+  }catch(e){ sessMsg("⚠ couldn't read that file — not valid JSON",true); return; }
+  if(!d||typeof d!=="object"||d.format!==SESS_FILE_FORMAT||d.v!==1||!d.project||d.project.v!==1){
+    sessMsg("⚠ not a PULSE session file — import rejected",true); return; }
+  const id=genSessId(),now=Date.now(),idx=sessIndex();
+  let name=(typeof d.name==="string"&&d.name.trim())?d.name.trim().slice(0,80):defaultSessName();
+  while(idx.some(s=>s.name===name))name+=" (imported)";
+  let skipped=0;
+  if(Array.isArray(d.audio))for(const a of d.audio){
+    try{
+      if(!a||typeof a.uid!=="string"||typeof a.wav!=="string")throw new Error("bad clip");
+      await sesPutClip(id,a.uid,wavToClip(b64ToBytes(a.wav)));
+    }catch(e){ skipped++; }
+  }
+  try{ localStorage.setItem(SESS_KEY_PREFIX+id,JSON.stringify({v:1,name,savedAt:isFinite(+d.savedAt)?+d.savedAt:now,project:d.project})); }
+  catch(e){ sesDeleteClips(id); sessMsg("⚠ couldn't import — browser storage is full",true); return; }
+  idx.push({id,name,created:now,updated:now});
+  if(!writeSessIndex(idx)){
+    try{ localStorage.removeItem(SESS_KEY_PREFIX+id); }catch(e){}
+    sesDeleteClips(id); sessMsg("⚠ couldn't import — browser storage is full",true); return;
+  }
+  renderSessions();
+  sessMsg('✓ imported “'+name+'”'+(skipped?" · "+skipped+" audio clip"+(skipped>1?"s":"")+" skipped":""));
+  if(askConfirm('Load “'+name+'” now?'))loadSession(id);
+}
+
+/* ---- sessions list UI ---- */
+function renderSessions(){
+  const wrap=document.getElementById("sessionList"); if(!wrap)return;
+  wrap.innerHTML="";
+  const idx=sessIndex();
+  if(!idx.length){
+    wrap.innerHTML='<span class="sub">No saved sessions yet — <b>💾 Save session</b> snapshots the whole project (beat, banks, mixer/FX &amp; audio tracks) under a name you can come back to, or export to another device.</span>';
+    return;
+  }
+  idx.slice().sort((a,b)=>(+b.updated||0)-(+a.updated||0)).forEach(e=>{
+    const row=document.createElement("div");
+    row.className="sesrow"+(e.id===activeSessionId?" cur":"");
+    row.dataset.ref="session-row"; row.dataset.sid=e.id;
+    const nm=document.createElement("span"); nm.className="sesname"; nm.textContent=e.name; nm.title=e.name;
+    if(e.id===activeSessionId){ const t=document.createElement("span"); t.className="sestag"; t.textContent="current"; nm.appendChild(t); }
+    const dt=document.createElement("span"); dt.className="sesdate"; dt.textContent=fmtSessDate(e.updated||e.created);
+    row.appendChild(nm); row.appendChild(dt);
+    const mkBtn=(txt,ref,fn,cls)=>{ const b=document.createElement("button");
+      b.className=cls||"small"; b.textContent=txt; b.dataset.ref=ref;
+      b.onclick=()=>fn(e.id); row.appendChild(b); return b; };
+    mkBtn("Load","session-load",loadSession);
+    mkBtn("Rename","session-rename",renameSession,"small ghost");
+    mkBtn("Export","session-export",exportSession,"small ghost");
+    mkBtn("✕ Delete","session-delete",deleteSession,"small ghost danger");
+    wrap.appendChild(row);
+  });
+}
+document.getElementById("saveSession").onclick=()=>{ saveSessionFlow(); };
+document.getElementById("newSession").onclick=()=>{ newBlankSession(); };
+const sessFileInput=document.getElementById("sessFile");
+document.getElementById("importSession").onclick=()=>sessFileInput.click();
+sessFileInput.onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f)importSessionFile(f); sessFileInput.value=""; };
+
 /* ============================ BOOT ============================ */
 /* Restore the saved project when one exists — otherwise keep the classic
    default generate. The guard means a restored project is never overwritten
@@ -1869,6 +2236,7 @@ if(!bootRestored){
   document.getElementById("genReadout").innerHTML='↺ project restored from your last session · <span style="color:var(--acc2)">▶ Play</span>';
 }
 renderSong();
+try{ renderSessions(); }catch(e){ console.warn("PULSE: sessions list failed to render",e); }
 updatePos(0);
 </script>
 </body>
