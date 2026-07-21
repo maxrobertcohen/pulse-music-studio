@@ -438,6 +438,49 @@
     padding:3px 7px;box-shadow:var(--inset-ctl);max-width:100%;overflow:hidden;text-overflow:ellipsis;
   }
 
+  /* ---------------- tracks / loop overdub ---------------- */
+  .tracks{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+  .trk{
+    display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+    padding:9px 12px;border-radius:var(--r-s);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface-0));
+    border:1px solid var(--line-soft);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 2px 6px rgba(0,0,0,.3);
+    transition:opacity .25s;
+  }
+  .trk.quiet{opacity:.42}
+  .tkind{
+    font:700 8.5px var(--font-mono);letter-spacing:.12em;flex:none;
+    color:#0b0c14;padding:3px 7px;border-radius:4px;background:var(--smp);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .trk[data-kind=mic] .tkind,.trk[data-kind=voice] .tkind{background:var(--hot)}
+  .trk[data-kind=synth] .tkind{background:var(--acc-hi)}
+  .tname{
+    flex:1;min-width:92px;background:transparent;border:none;color:var(--txt);
+    font:600 12.5px var(--font-ui);letter-spacing:.02em;padding:3px 0;
+    border-bottom:1px dashed transparent;transition:border-color .15s;
+  }
+  .tname:hover,.tname:focus{border-bottom-color:var(--line-strong)}
+  .tbtn{
+    width:30px;height:30px;padding:0;flex:none;
+    font:700 11px var(--font-mono);border-radius:var(--r-xs);color:var(--dim);
+  }
+  .tbtn.on-mute{
+    background:linear-gradient(180deg,var(--hot-hi),var(--hot-deep));border-color:var(--hot-deep);
+    color:#fff;box-shadow:0 0 12px -2px rgba(255,77,109,.6), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .tbtn.on-solo{
+    background:linear-gradient(180deg,var(--acc2-hi),var(--acc2-deep));border-color:var(--acc2-deep);
+    color:#03241c;box-shadow:0 0 12px -2px rgba(43,229,192,.6), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tmini{display:flex;align-items:center;gap:7px;flex:none}
+  .tmini label{font:600 8px var(--font-mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+  .tmini input[type=range]{width:96px}
+  .tmini input[type=range].tpan{width:64px}
+  .trk .tdel{color:var(--faint);cursor:pointer;flex:none;font-size:12px;padding:2px 4px;transition:color .15s}
+  .trk .tdel:hover{color:var(--hot)}
+
   /* ---------------- vocal booth + fx rack ---------------- */
   .panel.vocal{
     border-color:rgba(255,77,109,.34);
@@ -639,16 +682,39 @@
     <div class="seq" id="grid" data-ref="step-grid"></div>
   </div>
 
+  <!-- TRACKS / LOOP OVERDUB -->
+  <div class="panel" data-ref="tracks-panel">
+    <h2><span class="idx">05</span> Tracks · loop overdub <span class="sub">stack voice &amp; synth layers over the beat</span></h2>
+    <div class="transport" data-ref="overdub-controls">
+      <button id="odubBtn" data-ref="overdub-rec">● Overdub</button>
+      <div class="ctl"><label>Source</label>
+        <select id="odubSrc" data-ref="overdub-source" style="width:132px">
+          <option value="mic" selected>Mic (post-FX)</option><option value="synth">Synth</option>
+        </select></div>
+      <div class="ctl"><label>Loop bars</label>
+        <select id="odubBars" data-ref="overdub-bars">
+          <option>1</option><option>2</option><option selected>4</option><option>8</option>
+        </select></div>
+      <label class="pill" data-ref="overdub-countin-pill" title="After the next downbeat, wait one extra bar before recording starts">
+        <input type="checkbox" id="odubCountIn" checked data-ref="overdub-countin"/> 1-bar count-in</label>
+      <span class="pill"><span class="led" id="odubLed"></span> <span id="odubStat" data-ref="overdub-status">idle</span></span>
+    </div>
+    <div class="tracks" id="trackList" data-ref="track-list">
+      <span class="sub" id="trackEmpty">No layers yet — hit <b>● Overdub</b> to record your mic (with FX) or the synth as a synced loop: sing a hook, then stack a harmony, a spoken verse, a synth line. Imported files &amp; mic takes land here too.</span>
+    </div>
+    <div class="hint">Recording waits for the next bar (plus optional count-in), captures exactly the set bars in sync, then the layer <b>joins the mix on the next bar</b> and loops forever. <b>M</b> mutes · <b>S</b> solos (soloing any track mutes the rest). Every layer routes to the master bus, so <b>Export</b> captures the whole stack.</div>
+  </div>
+
   <div class="row">
     <!-- SAMPLING / IMPORT -->
     <div class="panel col" data-ref="sampler-panel">
-      <h2><span class="idx">05</span> Import audio <span class="sub">file → track</span></h2>
+      <h2><span class="idx">06</span> Import audio <span class="sub">file → track</span></h2>
       <div class="drop" id="drop" data-ref="import-drop">⬇ Drop an audio file here, or click to choose<br><span class="sub">wav · mp3 · m4a · ogg — becomes a new sequencer lane (loop-toggle for a full track)</span></div>
       <input type="file" id="fileInput" accept="audio/*" style="display:none"/>
     </div>
     <!-- SYNTH -->
     <div class="panel wide" data-ref="keyboard-panel">
-      <h2><span class="idx">06</span> Synth <span class="sub">mouse · qwerty (A–K) · midi</span></h2>
+      <h2><span class="idx">07</span> Synth <span class="sub">mouse · qwerty (A–K) · midi</span></h2>
       <div class="keys" id="keys" data-ref="piano-keys"></div>
     </div>
   </div>
@@ -656,7 +722,7 @@
   <div class="row">
     <!-- EXPORT -->
     <div class="panel exp" data-ref="export-panel">
-      <h2><span class="idx">07</span> Export <span class="sub">bounce to wav</span></h2>
+      <h2><span class="idx">08</span> Export <span class="sub">bounce to wav</span></h2>
       <div class="transport">
         <button id="exportBtn" class="rec" data-ref="export-btn">● Record output</button>
         <span class="pill"><span class="led" id="expLed"></span> <span id="expStat">idle</span></span>
@@ -665,7 +731,7 @@
     </div>
     <!-- MIXER -->
     <div class="panel col" data-ref="mixer-panel">
-      <h2><span class="idx">08</span> Mixer <span class="sub">channel levels · VOICE = your mic</span></h2>
+      <h2><span class="idx">09</span> Mixer <span class="sub">channel levels · VOICE = your mic</span></h2>
       <div class="mixrow" id="mixer"></div>
     </div>
   </div>
@@ -782,13 +848,19 @@ function paintPlayhead(i){ if(lastPlay>=0)playCells.forEach(set=>set[lastPlay]&&
   playCells.forEach(set=>set[i]&&set[i].classList.add("play")); lastPlay=i; }
 function clearPlayhead(){ if(lastPlay>=0)playCells.forEach(set=>set[lastPlay]&&set[lastPlay].classList.remove("play")); lastPlay=-1; }
 
-/* ============================ SAMPLE LANE FACTORY ============================ */
-function addSampleLane(name,toneBuffer,loopDefault){
+/* ============================ SAMPLE LANE / TRACK FACTORY ============================ */
+/* Every lane is a first-class track: player → pan (Tone.Panner) → muteGain
+   (mute/solo gate) → vol (fader) → masterVol, so all tracks land in the mix,
+   the master bus, and the WAV export. kind: sample | mic | voice | synth. */
+function addSampleLane(name,toneBuffer,loopDefault,kind){
   const id="smp"+(laneId++);
   const vol=new Tone.Volume(-4).connect(masterVol);
-  const player=new Tone.Player({loop:!!loopDefault}).connect(vol);
+  const muteGain=new Tone.Gain(1).connect(vol);
+  const pan=new Tone.Panner(0).connect(muteGain);
+  const player=new Tone.Player({loop:!!loopDefault}).connect(pan);
   player.buffer=toneBuffer;
-  const L={id,name,player,vol,steps:Array(STEPS).fill(0),loopMode:!!loopDefault,cells:[]};
+  const L={id,name,player,vol,pan,muteGain,muted:false,solo:false,kind:kind||"sample",
+           steps:Array(STEPS).fill(0),loopMode:!!loopDefault,cells:[]};
   // build lane row
   const lane=document.createElement("div");lane.className="lane";lane.dataset.smp=id;
   const head=document.createElement("div");head.className="lane-head";
@@ -804,22 +876,42 @@ function addSampleLane(name,toneBuffer,loopDefault){
     c.onclick=()=>{ L.steps[s]=L.steps[s]?0:1; c.classList.toggle("on",!!L.steps[s]); };
     steps.appendChild(c);L.cells.push(c); }
   lane.appendChild(head);lane.appendChild(steps);grid.appendChild(lane);
+  L.laneEl=lane; L.nmEl=nm;
   sampleLanes.push(L); playCells.push(L.cells);
   addMixerChannel(id,name.slice(0,5).toUpperCase(),vol);
+  addTrackRow(L);
   applyLaneLoop(L);
+  applyMuteSolo();
   return L;
 }
 function applyLaneLoop(L){
   try{ L.player.unsync(); L.player.stop(); }catch(e){}
   L.player.loop=L.loopMode;
-  if(L.loopMode){ L.player.sync().start(0); }
+  if(L.loopMode){
+    /* overdub tracks carry a phase (the bar they were recorded on) so multi-bar
+       loops recorded mid-song re-enter in phase: start at the next bar with the
+       right offset into the buffer. Plain lanes keep the classic start(0). */
+    if(L.phase&&Tone.Transport.state==="started"){
+      const tpb=TPB(), lt=L.phase.loopTicks;
+      const nextBar=(Math.floor(Tone.Transport.ticks/tpb)+1)*tpb;
+      const phaseTicks=((nextBar-L.phase.startTick)%lt+lt)%lt;
+      const offset=(phaseTicks/tpb)*secsPerBar();
+      L.player.sync().start(nextBar+"i",offset);
+    }else{
+      L.player.sync().start(0);
+    }
+  }
 }
 function removeSampleLane(L,laneEl){
   try{L.player.unsync();L.player.stop();L.player.dispose();}catch(e){}
+  try{L.pan&&L.pan.dispose();L.muteGain&&L.muteGain.dispose();L.vol.dispose();}catch(e){}
   laneEl.remove();
+  if(L.rowEl)L.rowEl.remove();
   const i=sampleLanes.indexOf(L); if(i>=0)sampleLanes.splice(i,1);
   const pi=playCells.indexOf(L.cells); if(pi>=0)playCells.splice(pi,1);
   const mx=document.querySelector('[data-mix="'+L.id+'"]'); if(mx)mx.remove();
+  if(!sampleLanes.length){ const te=document.getElementById("trackEmpty"); if(te)te.style.display=""; }
+  applyMuteSolo();
 }
 
 /* ============================ MIXER ============================ */
@@ -863,8 +955,8 @@ function onMidi(m){ const[st,d1,d2]=m.data,cmd=st&0xf0; if(cmd===0x90&&d2>0)note
 /* ============================ TRANSPORT ============================ */
 const playBtn=document.getElementById("playBtn"),stopBtn=document.getElementById("stopBtn");
 async function play(){ await ensureAudio(); if(state.playing)return; if(state.songMode)state.songBar=0; loop.start(0); Tone.Transport.start(); state.playing=true; playBtn.textContent="❚❚ Pause"; playBtn.classList.add("playing"); }
-function pause(){ Tone.Transport.pause(); state.playing=false; playBtn.textContent="▶ Play"; playBtn.classList.remove("playing"); }
-function stop(){ Tone.Transport.stop(); loop.stop(); state.playing=false; state.songBar=0; playBtn.textContent="▶ Play"; playBtn.classList.remove("playing"); clearPlayhead(); }
+function pause(){ Tone.Transport.pause(); state.playing=false; playBtn.textContent="▶ Play"; playBtn.classList.remove("playing"); odubAbort(); }
+function stop(){ Tone.Transport.stop(); loop.stop(); state.playing=false; state.songBar=0; playBtn.textContent="▶ Play"; playBtn.classList.remove("playing"); clearPlayhead(); odubAbort(); resyncPhasedLanes(); }
 playBtn.onclick=()=> state.playing?pause():play();
 stopBtn.onclick=stop;
 document.getElementById("bpm").oninput=e=>{Tone.Transport.bpm.rampTo(+e.target.value,0.1);updateSongLen();};
@@ -1244,8 +1336,158 @@ recMic.onclick=async()=>{
   else{
     const blob=await micRec.stop(); micRecording=false; recMic.textContent="● Record take"; recMic.classList.remove("rec"); micLed.classList.remove("hot");micLed.classList.add("on"); micStat.textContent="live — perform";
     const arr=await blob.arrayBuffer(); const audioBuf=await Tone.getContext().rawContext.decodeAudioData(arr);
-    addSampleLane("Mic "+(sampleLanes.filter(l=>l.name.startsWith("Mic")).length+1), new Tone.ToneAudioBuffer(audioBuf), true);
+    addSampleLane("Mic "+(sampleLanes.filter(l=>l.name.startsWith("Mic")).length+1), new Tone.ToneAudioBuffer(audioBuf), true, "mic");
     syncCells();
+  }
+};
+
+/* ============================ TRACKS PANEL + LOOP OVERDUB ============================ */
+/* Tracks panel: one row per sample lane (imports, mic takes, overdub layers)
+   with name / mute / solo / volume / pan / delete. Overdub: record the vocal
+   chain (fxOut, post-FX) or the synth (chan.lead.vol, post-FX) for an exact
+   number of bars, quantized to the transport, then drop it back in as a synced
+   looping track. All tracks feed masterVol → glue → master → exportRec. */
+const trackList=document.getElementById("trackList"),trackEmpty=document.getElementById("trackEmpty");
+const TKIND={sample:"SMP",mic:"MIC",voice:"VOX",synth:"SYN"};
+function TPB(){ return Tone.Transport.PPQ*4; }                     // ticks per 4/4 bar
+function secsPerBar(){ return (60/Tone.Transport.bpm.value)*4; }
+function preciseAt(time,fn){ /* run fn at the exact audio time (callbacks fire a lookahead early) */
+  const ms=Math.max(0,(time-Tone.getContext().currentTime)*1000); setTimeout(fn,ms); }
+function trimToBars(buf,bars){ /* exact-length loop: trim/pad the take to whole bars */
+  const ctx=Tone.getContext().rawContext;
+  const len=Math.max(1,Math.round(bars*secsPerBar()*buf.sampleRate));
+  const out=ctx.createBuffer(Math.max(1,buf.numberOfChannels),len,buf.sampleRate);
+  for(let c=0;c<out.numberOfChannels;c++){
+    const s=buf.getChannelData(Math.min(c,buf.numberOfChannels-1)),d=out.getChannelData(c);
+    d.set(s.subarray(0,Math.min(len,s.length)));
+  }
+  return out;
+}
+function addTrackRow(L){
+  if(trackEmpty)trackEmpty.style.display="none";
+  const row=document.createElement("div"); row.className="trk"; row.dataset.kind=L.kind; row.dataset.ref="track-"+L.id;
+  const tag=document.createElement("span"); tag.className="tkind"; tag.textContent=TKIND[L.kind]||"SMP"; row.appendChild(tag);
+  const nm=document.createElement("input"); nm.className="tname"; nm.type="text"; nm.value=L.name;
+  nm.dataset.ref="track-name"; nm.title="track name";
+  nm.oninput=()=>{ const v=nm.value.trim(); if(!v)return; L.name=v;
+    if(L.nmEl)L.nmEl.textContent=v.slice(0,10).toUpperCase();
+    const mx=document.querySelector('[data-mix="'+L.id+'"] div'); if(mx)mx.textContent=v.slice(0,5).toUpperCase(); };
+  row.appendChild(nm);
+  const mute=document.createElement("button"); mute.className="tbtn"; mute.textContent="M"; mute.title="mute track"; mute.dataset.ref="track-mute";
+  mute.onclick=()=>{ L.muted=!L.muted; applyMuteSolo(); };
+  const solo=document.createElement("button"); solo.className="tbtn"; solo.textContent="S"; solo.title="solo track (mutes the rest)"; solo.dataset.ref="track-solo";
+  solo.onclick=()=>{ L.solo=!L.solo; applyMuteSolo(); };
+  row.appendChild(mute); row.appendChild(solo); L.muteBtn=mute; L.soloBtn=solo;
+  const vw=document.createElement("div"); vw.className="tmini";
+  const vl=document.createElement("label"); vl.textContent="vol"; vw.appendChild(vl);
+  const vr=document.createElement("input"); vr.type="range"; vr.min=-40; vr.max=6; vr.value=L.vol.volume.value; vr.dataset.ref="track-vol";
+  vr.oninput=()=>{ L.vol.volume.rampTo(+vr.value,0.05);
+    const mi=document.querySelector('[data-mix="'+L.id+'"] input'); if(mi)mi.value=vr.value; };
+  vw.appendChild(vr); row.appendChild(vw);
+  const pw=document.createElement("div"); pw.className="tmini";
+  const pl=document.createElement("label"); pl.textContent="pan"; pw.appendChild(pl);
+  const pr=document.createElement("input"); pr.type="range"; pr.className="tpan"; pr.min=-100; pr.max=100; pr.value=0; pr.dataset.ref="track-pan";
+  pr.title="pan — double-click to center";
+  pr.oninput=()=>L.pan.pan.rampTo((+pr.value)/100,0.05);
+  pr.ondblclick=()=>{ pr.value=0; L.pan.pan.rampTo(0,0.05); };
+  pw.appendChild(pr); row.appendChild(pw);
+  const del=document.createElement("span"); del.className="tdel"; del.textContent="✕"; del.title="delete track"; del.dataset.ref="track-del";
+  del.onclick=()=>removeSampleLane(L,L.laneEl);
+  row.appendChild(del);
+  trackList.appendChild(row); L.rowEl=row;
+  const mi=document.querySelector('[data-mix="'+L.id+'"] input');   // mixer fader ↔ row fader stay in sync
+  if(mi)mi.addEventListener("input",()=>{ vr.value=mi.value; });
+}
+function applyMuteSolo(){
+  const anySolo=sampleLanes.some(t=>t.solo);
+  sampleLanes.forEach(t=>{
+    if(!t.muteGain)return;
+    const audible=!t.muted&&(!anySolo||t.solo);
+    t.muteGain.gain.rampTo(audible?1:0,0.04);
+    if(t.muteBtn)t.muteBtn.classList.toggle("on-mute",t.muted);
+    if(t.soloBtn)t.soloBtn.classList.toggle("on-solo",t.solo);
+    if(t.rowEl)t.rowEl.classList.toggle("quiet",!audible);
+  });
+}
+
+/* ---- loop-overdub recorder ---- */
+const odubBtn=document.getElementById("odubBtn"),odubSrc=document.getElementById("odubSrc"),
+      odubBarsSel=document.getElementById("odubBars"),odubCountIn=document.getElementById("odubCountIn"),
+      odubLed=document.getElementById("odubLed"),odubStat=document.getElementById("odubStat");
+const odub={phase:"idle",ids:[],rec:null,tap:null,src:"mic",bars:4,startTick:0};
+function odubUi(txt,led){ odubStat.textContent=txt;
+  odubLed.classList.toggle("hot",led==="hot"); odubLed.classList.toggle("on",led==="on"); }
+function odubReset(){
+  odub.ids.forEach(id=>Tone.Transport.clear(id)); odub.ids=[];
+  if(odub.tap&&odub.rec){ try{odub.tap.disconnect(odub.rec);}catch(e){} }
+  odub.tap=null; odub.phase="idle";
+  odubBtn.textContent="● Overdub"; odubBtn.classList.remove("rec");
+}
+function odubAbort(){ /* transport halted mid-overdub → never leave a stuck record state */
+  if(odub.phase==="armed"||odub.phase==="rec"){
+    try{ if(odub.rec&&odub.rec.state==="started")odub.rec.stop(); }catch(e){}
+    odubReset(); odubUi("cancelled — transport halted");
+  }
+}
+function resyncPhasedLanes(){ sampleLanes.forEach(L=>{ if(L.phase)applyLaneLoop(L); }); }
+function finishOdub(t,bars){
+  if(odub.phase!=="rec")return;
+  odub.phase="closing";
+  const src=odub.src, st=odub.startTick;
+  const wrap=async()=>{
+    let blob=null; try{ blob=await odub.rec.stop(); }catch(e){}
+    odubReset(); odubUi("processing…","on");
+    if(!blob){ odubUi("nothing captured"); return; }
+    try{
+      const arr=await blob.arrayBuffer();
+      const audioBuf=await Tone.getContext().rawContext.decodeAudioData(arr);
+      const kind=src==="synth"?"synth":"voice";
+      const nm=(src==="synth"?"Synth loop ":"Voice loop ")+(sampleLanes.filter(l=>l.kind===kind).length+1);
+      const L=addSampleLane(nm,new Tone.ToneAudioBuffer(trimToBars(audioBuf,bars)),true,kind);
+      L.phase={startTick:st,loopTicks:bars*TPB()};
+      applyLaneLoop(L);            // re-sync with phase → joins the mix on the next bar
+      syncCells();
+      odubUi("✓ "+nm+" — "+bars+" bar"+(bars>1?"s":"")+" · joins next bar");
+    }catch(e){ odubUi("⚠ couldn't decode that take"); }
+  };
+  if(t!==undefined) preciseAt(t+0.08,wrap); else wrap();   // small pad so the tail lands, trimmed to exact bars
+}
+odubBtn.onclick=async()=>{
+  await ensureAudio();
+  if(odub.phase==="idle"){
+    odub.src=odubSrc.value; odub.bars=Math.max(1,+odubBarsSel.value||4);
+    if(odub.src==="mic"&&!micUser){
+      await armMic.onclick();
+      if(!micUser){ odubUi("arm the mic first (permission needed)"); return; }
+    }
+    if(!state.playing)await play();
+    if(!odub.rec)odub.rec=new Tone.Recorder();
+    odub.tap=odub.src==="synth"?chan.lead.vol:fxOut;   // synth post-FX · voice post-FX (throws get baked in)
+    odub.tap.connect(odub.rec);
+    const tpb=TPB(), cur=Tone.Transport.ticks;
+    const startTick=(Math.floor(cur/tpb)+1)*tpb + (odubCountIn.checked?tpb:0);
+    const stopTick=startTick+odub.bars*tpb;
+    odub.startTick=startTick;
+    odub.phase="armed"; odubBtn.textContent="■ Cancel"; odubBtn.classList.add("rec");
+    odubUi(odubCountIn.checked?"count-in — recording on the bar after next":"waiting for the next bar…","on");
+    odub.ids.push(Tone.Transport.scheduleOnce(t=>{
+      if(odub.phase!=="armed")return;
+      odub.phase="rec";
+      preciseAt(t,()=>{ if(odub.phase==="rec"){ try{odub.rec.start();}catch(e){} } });
+      Tone.Draw.schedule(()=>{ if(odub.phase==="rec"){ odubBtn.textContent="■ Stop";
+        odubUi("● recording — bar 1/"+odub.bars,"hot"); } },t);
+    },startTick+"i"));
+    for(let b=1;b<odub.bars;b++){
+      odub.ids.push(Tone.Transport.scheduleOnce(t=>Tone.Draw.schedule(()=>{
+        if(odub.phase==="rec")odubUi("● recording — bar "+(b+1)+"/"+odub.bars,"hot"); },t),(startTick+b*tpb)+"i"));
+    }
+    odub.ids.push(Tone.Transport.scheduleOnce(t=>finishOdub(t,odub.bars),stopTick+"i"));
+  }
+  else if(odub.phase==="armed"){ odubReset(); odubUi("cancelled"); }
+  else if(odub.phase==="rec"){
+    const done=Math.floor((Tone.Transport.ticks-odub.startTick)/TPB());  // manual stop → snap to whole bars
+    if(done<1){ try{ if(odub.rec.state==="started")odub.rec.stop(); }catch(e){} odubReset(); odubUi("discarded — under 1 bar"); }
+    else finishOdub(undefined,done);
   }
 };
 
